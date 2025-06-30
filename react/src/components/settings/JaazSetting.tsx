@@ -44,10 +44,10 @@ export default function JaazSetting({
         <div className="flex items-center gap-2">
           <img
             src={LOGO_URL}
-            alt="Jaaz"
+            alt="open gallary"
             className="w-10 h-10 rounded-full"
           />
-          <p className="font-bold text-2xl w-fit">Jaaz</p>
+          <p className="font-bold text-2xl w-fit">open gallary</p>
           {/* <span>✨ Custom Provider</span> */}
         </div>
 

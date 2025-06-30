@@ -5,7 +5,7 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-from routers import config, agent, workspace, image_tools, canvas, ssl_test, chat_router, settings
+from routers import config, agent, workspace, image_tools, canvas, chat_router, settings
 import routers.websocket_router
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -36,7 +36,7 @@ app.include_router(agent.router)
 app.include_router(canvas.router)
 app.include_router(workspace.router)
 app.include_router(image_tools.router)
-app.include_router(ssl_test.router)
+
 app.include_router(chat_router.router)
 
 # Mount the React build directory
@@ -86,4 +86,4 @@ if __name__ == "__main__":
     import uvicorn
     print("🌟Starting server, UI_DIST_DIR:", os.environ.get('UI_DIST_DIR'))
 
-    uvicorn.run(socket_app, host="127.0.0.1", port=args.port)
+    uvicorn.run(socket_app, host="0.0.0.0", port=args.port)

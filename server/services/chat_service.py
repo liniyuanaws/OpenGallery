@@ -6,7 +6,7 @@ import json
 
 # Import service modules
 from services.db_service import db_service
-from services.langgraph_service import langgraph_agent, langgraph_multi_agent
+from services.strands_service import strands_agent, strands_multi_agent
 from services.config_service import config_service
 from services.websocket_service import send_to_websocket
 from services.stream_service import add_stream_task, remove_stream_task
@@ -19,7 +19,7 @@ async def handle_chat(data):
     - Parse incoming chat data.
     - Optionally inject system prompt.
     - Save chat session and messages to the database.
-    - Launch langgraph_agent task to process chat.
+    - Launch strands_agent task to process chat.
     - Manage stream task lifecycle (add, remove).
     - Notify frontend via WebSocket when stream is done.
 
@@ -49,14 +49,14 @@ async def handle_chat(data):
 
     await db_service.create_message(session_id, messages[-1].get('role', 'user'), json.dumps(messages[-1])) if len(messages) > 0 else None
 
-    # Create and start langgraph_agent task for chat processing
-    task = asyncio.create_task(langgraph_multi_agent(
+    # Create and start strands agent task for chat processing
+    task = asyncio.create_task(strands_agent(
         messages, canvas_id, session_id, text_model, image_model, system_prompt))
 
     # Register the task in stream_tasks (for possible cancellation)
     add_stream_task(session_id, task)
     try:
-        # Await completion of the langgraph_agent task
+        # Await completion of the strands_agent task
         await task
     except asyncio.exceptions.CancelledError:
         print(f"🛑Session {session_id} cancelled during stream")

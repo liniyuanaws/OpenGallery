@@ -65,6 +65,7 @@ export type LLMConfig = {
   url: string
   api_key: string
   max_tokens?: number
+  region?: string  // 添加 region 字段支持 Bedrock
 }
 
 export type CanvasData = {

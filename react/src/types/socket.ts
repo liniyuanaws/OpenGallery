@@ -7,6 +7,7 @@ export enum SessionEventType {
   Done = 'done',
   Info = 'info',
   ImageGenerated = 'image_generated',
+  FileGenerated = 'file_generated',
   Delta = 'delta',
   ToolCall = 'tool_call',
   ToolCallArguments = 'tool_call_arguments',
@@ -35,6 +36,15 @@ export interface SessionImageGeneratedEvent extends SessionBaseEvent {
   file: BinaryFileData
   canvas_id: string
   image_url: string
+}
+export interface SessionFileGeneratedEvent extends SessionBaseEvent {
+  type: SessionEventType.FileGenerated
+  file_id: string
+  file_path: string
+  width: number
+  height: number
+  tool_call_id: string
+  canvas_id?: string
 }
 export interface SessionDeltaEvent extends SessionBaseEvent {
   type: SessionEventType.Delta
@@ -66,6 +76,7 @@ export type SessionUpdateEvent =
   | SessionToolCallArgumentsEvent
   | SessionToolCallProgressEvent
   | SessionImageGeneratedEvent
+  | SessionFileGeneratedEvent
   | SessionAllMessagesEvent
   | SessionDoneEvent
   | SessionErrorEvent

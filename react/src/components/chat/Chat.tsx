@@ -2,6 +2,7 @@ import { sendMessages } from '@/api/chat'
 import Blur from '@/components/common/Blur'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { eventBus, TEvents } from '@/lib/event'
+import { socketManager } from '@/lib/socket'
 import {
   AssistantMessage,
   Message,
@@ -227,6 +228,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     [canvasId, sessionId]
   )
 
+  const handleFileGenerated = useCallback(
+    (data: TEvents['Socket::Session::FileGenerated']) => {
+      if (data.session_id !== sessionId) {
+        return
+      }
+
+      console.log('⭐️file_generated', data)
+
+      // 创建图像消息并添加到聊天中
+      const imageMessage: Message = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'image_url',
+            image_url: {
+              url: `/api/file/${data.file_id}`
+            }
+          }
+        ]
+      }
+
+      setMessages(prev => [...prev, imageMessage])
+      setPending(false)
+      scrollToBottom()
+    },
+    [sessionId, scrollToBottom]
+  )
+
   const handleAllMessages = useCallback(
     (data: TEvents['Socket::Session::AllMessages']) => {
       if (data.session_id && data.session_id !== sessionId) {
@@ -285,6 +314,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     eventBus.on('Socket::Session::ToolCall', handleToolCall)
     eventBus.on('Socket::Session::ToolCallArguments', handleToolCallArguments)
     eventBus.on('Socket::Session::ImageGenerated', handleImageGenerated)
+    eventBus.on('Socket::Session::FileGenerated', handleFileGenerated)
     eventBus.on('Socket::Session::AllMessages', handleAllMessages)
     eventBus.on('Socket::Session::Done', handleDone)
     eventBus.on('Socket::Session::Error', handleError)
@@ -299,6 +329,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         handleToolCallArguments
       )
       eventBus.off('Socket::Session::ImageGenerated', handleImageGenerated)
+      eventBus.off('Socket::Session::FileGenerated', handleFileGenerated)
       eventBus.off('Socket::Session::AllMessages', handleAllMessages)
       eventBus.off('Socket::Session::Done', handleDone)
       eventBus.off('Socket::Session::Error', handleError)
@@ -328,6 +359,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     initChat()
   }, [sessionId, initChat])
 
+  // 管理轮询会话
+  useEffect(() => {
+    if (sessionId) {
+      // 总是添加活跃会话到轮询列表（作为WebSocket的备用机制）
+      socketManager.addActiveSession(sessionId)
+    }
+
+    return () => {
+      // 组件卸载时从轮询列表中移除
+      if (sessionId) {
+        socketManager.removeActiveSession(sessionId)
+      }
+    }
+  }, [sessionId])
+
   const onSelectSession = (sessionId: string) => {
     setSession(sessionList.find((s) => s.id === sessionId) || null)
     window.history.pushState(
@@ -355,6 +401,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     (data: Message[], configs: { textModel: Model; imageModel: Model }) => {
       setPending('text')
       setMessages(data)
+
+      // 总是添加会话到轮询列表（作为WebSocket的备用机制）
+      if (sessionId) {
+        socketManager.addActiveSession(sessionId)
+      }
 
       sendMessages({
         sessionId: sessionId!,
@@ -466,7 +517,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 transition={{ duration: 0.5 }}
                 className="text-muted-foreground text-3xl"
               >
-                <ShinyText text="Hello, Jaaz!" />
+                <ShinyText text="Hello, open gallary!" />
               </motion.span>
               <motion.span
                 initial={{ opacity: 0, y: 10 }}

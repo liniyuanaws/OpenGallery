@@ -21,7 +21,7 @@ function HomeHeader() {
     >
       <div className="flex items-center gap-2">
         <img src={LOGO_URL} alt="logo" className="size-8" draggable={false} />
-        <p className="text-xl font-bold">Jaaz</p>
+        <p className="text-xl font-bold">open gallary</p>
       </div>
       <div className="flex items-center gap-2">
         <NotificationPanel />

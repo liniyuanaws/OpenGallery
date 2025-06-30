@@ -1,4 +1,5 @@
 import os
+import time
 from fastapi import APIRouter
 import requests
 from services.config_service import config_service
@@ -23,15 +24,23 @@ async def workspace_download(path: str):
     return download_file(path)
 
 def get_ollama_model_list():
-    base_url = config_service.get_config().get('ollama', {}).get(
-        'url', os.getenv('OLLAMA_HOST', 'http://localhost:11434'))
+    # Check if Ollama is configured with API key or models
+    ollama_config = config_service.get_config().get('ollama', {})
+
+    # Skip Ollama if no models are configured and no API key is set
+    if not ollama_config.get('models') and not ollama_config.get('api_key'):
+        return []
+
+    base_url = ollama_config.get('url', os.getenv('OLLAMA_HOST', 'http://localhost:11434'))
     try:
         response = requests.get(f'{base_url}/api/tags', timeout=5)
         response.raise_for_status()
         data = response.json()
         return [model['name'] for model in data.get('models', [])]
     except requests.RequestException as e:
-        print(f"Error querying Ollama: {e}")
+        # Only print error if Ollama is explicitly configured
+        if ollama_config.get('models') or ollama_config.get('api_key'):
+            print(f"Error querying Ollama: {e}")
         return []
 
 
@@ -42,7 +51,11 @@ async def get_models():
     ollama_models = get_ollama_model_list()
     ollama_url = config_service.get_config().get('ollama', {}).get(
         'url', os.getenv('OLLAMA_HOST', 'http://localhost:11434'))
-    print('👇ollama_models', ollama_models)
+
+    # Only print ollama_models if there are any or if Ollama is configured
+    ollama_config = config_service.get_config().get('ollama', {})
+    if ollama_models or ollama_config.get('models') or ollama_config.get('api_key'):
+        print('👇ollama_models', ollama_models)
     for ollama_model in ollama_models:
         res.append({
             'provider': 'ollama',
@@ -55,7 +68,8 @@ async def get_models():
         for model_name in models:
             if provider == 'ollama':
                 continue
-            if provider != 'comfyui' and config[provider].get('api_key', '') == '':
+            # Skip providers that require API key but don't have one (except bedrock and comfyui)
+            if provider not in ['comfyui', 'bedrock'] and config[provider].get('api_key', '') == '':
                 continue
             model = models[model_name]
             res.append({
@@ -75,3 +89,19 @@ async def list_chat_sessions():
 @router.get("/chat_session/{session_id}")
 async def get_chat_session(session_id: str):
     return await db_service.get_chat_history(session_id)
+
+@router.get("/chat_session/{session_id}/status")
+async def get_chat_session_status(session_id: str):
+    """获取会话状态，包括消息和处理状态"""
+    from services.stream_service import get_stream_task
+
+    messages = await db_service.get_chat_history(session_id)
+    task = get_stream_task(session_id)
+    is_processing = task is not None and not task.done()
+
+    return {
+        "session_id": session_id,
+        "messages": messages,
+        "is_processing": is_processing,
+        "timestamp": int(time.time() * 1000)  # 毫秒时间戳
+    }

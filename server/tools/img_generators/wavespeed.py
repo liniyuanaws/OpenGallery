@@ -2,7 +2,10 @@ from typing import Optional
 import os
 import asyncio
 import traceback
-from .base import ImageGenerator, get_image_info_and_save, generate_image_id
+try:
+    from .base import ImageGenerator, get_image_info_and_save, generate_image_id
+except ImportError:
+    from tools.img_generators.base import ImageGenerator, get_image_info_and_save, generate_image_id
 from services.config_service import config_service, FILES_DIR
 from utils.http_client import HttpClient
 
@@ -78,7 +81,7 @@ class WavespeedGenerator(ImageGenerator):
                         image_url, os.path.join(FILES_DIR, f'{image_id}')
                     )
                     filename = f'{image_id}.{extension}'
-                    return mime_type, width, height, filename
+                    return image_id, width, height, filename
 
                 if status == "failed":
                     raise Exception(

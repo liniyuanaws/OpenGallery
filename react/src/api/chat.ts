@@ -14,6 +14,9 @@ export const sendMessages = async (payload: {
   imageModel: Model
   systemPrompt: string | null
 }) => {
+  // 添加调试日志
+  console.log('🔍 DEBUG: Sending to backend - imageModel:', payload.imageModel)
+
   const response = await fetch(`/api/chat`, {
     method: 'POST',
     headers: {

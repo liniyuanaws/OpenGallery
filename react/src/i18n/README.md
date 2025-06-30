@@ -67,7 +67,7 @@ return <button>{t('common:buttons.save')}</button>
 // }
 
 const { t } = useTranslation()
-return <div>{t('common:welcome', { name: 'Jaaz' })}</div>
+return <div>{t('common:welcome', { name: 'open gallary' })}</div>
 ```
 
 ### 4. 语言切换

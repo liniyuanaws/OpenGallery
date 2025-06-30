@@ -2,7 +2,10 @@ from typing import Optional
 import os
 import traceback
 import base64
-from .base import ImageGenerator, get_image_info_and_save, generate_image_id
+try:
+    from .base import ImageGenerator, get_image_info_and_save, generate_image_id
+except ImportError:
+    from tools.img_generators.base import ImageGenerator, get_image_info_and_save, generate_image_id
 from services.config_service import config_service, FILES_DIR
 from utils.http_client import HttpClient
 
@@ -93,7 +96,7 @@ class JaazGenerator(ImageGenerator):
             )
 
             filename = f'{image_id}.{extension}'
-            return mime_type, width, height, filename
+            return image_id, width, height, filename
 
         except Exception as e:
             print('Error generating image with Jaaz:', e)
@@ -175,7 +178,7 @@ class JaazGenerator(ImageGenerator):
                         is_b64=True
                     )
                     filename = f'{image_id}.{extension}'
-                    return mime_type, width, height, filename
+                    return image_id, width, height, filename
                 elif 'url' in image_data:
                     # URL 格式响应
                     image_url = image_data['url']
@@ -185,7 +188,7 @@ class JaazGenerator(ImageGenerator):
                         os.path.join(FILES_DIR, f'{image_id}')
                     )
                     filename = f'{image_id}.{extension}'
-                    return mime_type, width, height, filename
+                    return image_id, width, height, filename
 
             # 如果没有找到有效的图像数据
             error_detail = res.get('error', res.get('detail', 'Unknown error'))

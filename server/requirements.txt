@@ -18,8 +18,8 @@ certifi
 websocket-client # needed for comfyui execution
 rich # needed for comfyui execution
 typer # needed for comfyui execution
-langgraph
-langchain_ollama
-langchain_openai
+strands-agents
+strands-agents-tools
 python-socketio==5.13.0
-langgraph-swarm
+boto3>=1.34.44
+botocore>=1.34.44

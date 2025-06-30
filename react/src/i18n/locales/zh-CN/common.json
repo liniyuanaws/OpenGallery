@@ -61,7 +61,7 @@
   "auth": {
     "login": "登录",
     "logout": "退出登录",
-    "loginToJaaz": "登录到 Jaaz",
+    "loginToJaaz": "登录到 open gallary",
     "myAccount": "我的账户",
     "loginDescription": "登录后可以使用云端 AI 模型",
     "startLogin": "开始登录",

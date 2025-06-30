@@ -1,9 +1,9 @@
 # server/routers/video_tools.py
 
-# langchain & langgraph
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool, InjectedToolCallId
-from typing_extensions import Annotated
+# Note: This module is deprecated - video tools should be migrated to Strands format
+# from langchain_core.runnables import RunnableConfig
+# from langchain_core.tools import tool, InjectedToolCallId
+# from typing_extensions import Annotated
 
 # standard libs
 import json

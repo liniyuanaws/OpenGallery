@@ -4,7 +4,14 @@ import base64
 from PIL import Image
 from io import BytesIO
 import aiofiles
-from nanoid import generate
+try:
+    from nanoid import generate
+except ImportError:
+    # Fallback ID generation if nanoid is not available
+    import random
+    import string
+    def generate(size=8):
+        return ''.join(random.choices(string.ascii_lowercase + string.digits, k=size))
 from utils.http_client import HttpClient
 
 
@@ -31,7 +38,7 @@ class ImageGenerator(ABC):
             **kwargs: Additional provider-specific parameters
 
         Returns:
-            Tuple of (mime_type, width, height, filename)
+            Tuple of (file_id, width, height, filename)
         """
         pass
 

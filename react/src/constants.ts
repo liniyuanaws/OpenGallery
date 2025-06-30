@@ -1,15 +1,36 @@
 import type { LLMConfig, ToolCallFunctionName } from '@/types/types'
 
+// 获取 API 基础 URL
+const getBaseApiUrl = () => {
+  if (typeof window === 'undefined') {
+    // 服务端渲染时的默认值
+    return 'http://localhost:57988'
+  }
+
+  const hostname = window.location.hostname
+
+  // 如果当前访问的是 EC2 域名，则 API 也使用 EC2 域名
+  if (hostname.includes('amazonaws.com') || hostname.includes('ec2-')) {
+    return 'http://ec2-52-24-176-86.us-west-2.compute.amazonaws.com:57988'
+  }
+
+  // 本地开发环境
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:57988'
+  }
+
+  // 生产环境
+  return 'https://jaaz.app'
+}
+
 // API Configuration
-export const BASE_API_URL = import.meta.env.DEV
-  ? 'http://localhost:3000'
-  : 'https://jaaz.app'
+export const BASE_API_URL = getBaseApiUrl()
 
 export const PROVIDER_NAME_MAPPING: {
   [key: string]: { name: string; icon: string }
 } = {
   jaaz: {
-    name: 'Jaaz',
+    name: 'open gallary',
     icon: 'https://raw.githubusercontent.com/11cafe/jaaz/refs/heads/main/assets/icons/jaaz.png',
   },
   anthropic: {
@@ -36,6 +57,10 @@ export const PROVIDER_NAME_MAPPING: {
   comfyui: {
     name: 'ComfyUI',
     icon: 'https://framerusercontent.com/images/3cNQMWKzIhIrQ5KErBm7dSmbd2w.png',
+  },
+  bedrock: {
+    name: 'AWS Bedrock',
+    icon: 'https://a0.awsstatic.com/libra-css/images/logos/aws_logo_smile_1200x630.png',
   },
 }
 export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
@@ -102,11 +127,10 @@ export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
   },
   comfyui: {
     models: {
-      'flux-dev': { type: 'image' },
-      'flux-schnell': { type: 'image' },
-      sdxl: { type: 'image' },
+      'flux-kontext': { type: 'image' },
+      'flux-t2i': { type: 'image' },
     },
-    url: 'http://127.0.0.1:8188',
+    url: 'http://comfyui-alb-905118004.us-west-2.elb.amazonaws.com:8080',
     api_key: '',
   },
   // huggingface: {
@@ -116,11 +140,14 @@ export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
   //   url: "https://api.replicate.com/v1/",
   //   api_key: "",
   // },
-  ollama: {
-    models: {},
-    url: 'http://localhost:11434',
+  bedrock: {
+    models: {
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0': { type: 'text' },
+    },
+    url: '',
     api_key: '',
     max_tokens: 8192,
+    region: 'us-west-2',
   },
 }
 

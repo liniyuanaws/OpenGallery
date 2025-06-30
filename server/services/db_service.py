@@ -10,7 +10,7 @@ from .migrations.manager import MigrationManager
 DB_PATH = os.path.join(USER_DATA_DIR, "localmanus.db")
 
 # Database version
-CURRENT_VERSION = 2
+CURRENT_VERSION = 4
 
 class DatabaseService:
     def __init__(self):
@@ -196,5 +196,44 @@ class DatabaseService:
             await db.execute("DELETE FROM comfy_workflows WHERE id = ?", (id,))
             await db.commit()
 
+    async def create_file(self, file_id: str, file_path: str, width: int = None, height: int = None):
+        """Create a new file record"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO files (id, file_path, width, height)
+                VALUES (?, ?, ?, ?)
+            """, (file_id, file_path, width, height))
+            await db.commit()
+
+    async def get_file(self, file_id: str) -> Optional[Dict[str, Any]]:
+        """Get file record by ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = sqlite3.Row
+            cursor = await db.execute("""
+                SELECT id, file_path, width, height, created_at, updated_at
+                FROM files
+                WHERE id = ?
+            """, (file_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def list_files(self) -> List[Dict[str, Any]]:
+        """List all files"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = sqlite3.Row
+            cursor = await db.execute("""
+                SELECT id, file_path, width, height, created_at, updated_at
+                FROM files
+                ORDER BY created_at DESC
+            """)
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def delete_file(self, file_id: str):
+        """Delete a file record"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM files WHERE id = ?", (file_id,))
+            await db.commit()
+
 # Create a singleton instance
-db_service = DatabaseService() 
+db_service = DatabaseService()
