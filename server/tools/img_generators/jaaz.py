@@ -145,10 +145,8 @@ class JaazGenerator(ImageGenerator):
             # 如果有输入图像（编辑模式）
             if input_path:
                 if input_path.startswith('data:'):
-                    print('🦄 Jaaz OpenAI image generation input_path is base64')
                     data['input_image'] = input_path
                 else:
-                    print('🦄 Jaaz OpenAI image generation input_path is file path')
                     # 如果是文件路径，将图像转换为 base64
                     with open(input_path, 'rb') as image_file:
                         image_data = image_file.read()

@@ -38,7 +38,7 @@ kill_by_port() {
     local port=$1
     local service_name=$2
     
-    echo "🔍 Checking for processes on port $port..."
+    echo "🔍 Checking port $port..."
     local pids=$(lsof -ti:$port 2>/dev/null || true)
     
     if [ -n "$pids" ]; then

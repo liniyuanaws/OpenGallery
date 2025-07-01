@@ -41,6 +41,19 @@ DEFAULT_PROVIDERS_CONFIG = {
     }
 }
 
+# Database configuration
+DEFAULT_DATABASE_CONFIG = {
+    "database": {
+        "type": "sqlite",  # "sqlite" or "dynamodb"
+        "sqlite": {
+            "path": None  # Will use default path if None
+        },
+        "dynamodb": {
+            "region": "us-west-2"
+        }
+    }
+}
+
 USER_DATA_DIR = os.getenv("USER_DATA_DIR", os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "user_data"))
 FILES_DIR = os.path.join(USER_DATA_DIR, "files")
@@ -49,6 +62,7 @@ FILES_DIR = os.path.join(USER_DATA_DIR, "files")
 class ConfigService:
     def __init__(self):
         self.app_config = DEFAULT_PROVIDERS_CONFIG
+        self.db_config = DEFAULT_DATABASE_CONFIG
         self.root_dir = os.path.dirname(
             os.path.dirname(os.path.dirname(__file__)))
         self.config_file = os.getenv(
@@ -60,10 +74,14 @@ class ConfigService:
         try:
             with open(self.config_file, 'r') as f:
                 config = toml.load(f)
-            # Merge with default config to ensure all providers have default values
+
+            # Merge provider config with defaults
             merged_config = DEFAULT_PROVIDERS_CONFIG.copy()
             for provider, provider_config in config.items():
-                if provider in merged_config:
+                if provider == 'database':
+                    # Handle database config separately
+                    continue
+                elif provider in merged_config:
                     # Merge provider config with defaults
                     merged_config[provider] = {**merged_config[provider], **provider_config}
                     # Merge models specifically
@@ -76,14 +94,26 @@ class ConfigService:
                     # Add new provider not in defaults
                     merged_config[provider] = provider_config
             self.app_config = merged_config
+
+            # Handle database config
+            if 'database' in config:
+                self.db_config = {**DEFAULT_DATABASE_CONFIG, **config}
+            else:
+                self.db_config = DEFAULT_DATABASE_CONFIG.copy()
+
         except Exception as e:
             print(f"Config file not found or invalid, using defaults: {e}")
             # Use default config if file doesn't exist or is invalid
             self.app_config = DEFAULT_PROVIDERS_CONFIG.copy()
+            self.db_config = DEFAULT_DATABASE_CONFIG.copy()
 
     def get_config(self):
         # 直接返回内存中的配置
         return self.app_config
+
+    def get_database_config(self):
+        """Get database configuration"""
+        return self.db_config.get('database', DEFAULT_DATABASE_CONFIG['database'])
 
     async def exists_config(self):
         """Check if config file exists"""

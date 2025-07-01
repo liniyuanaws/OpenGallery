@@ -61,11 +61,9 @@ class ComfyUIGenerator(ImageGenerator):
     ) -> tuple[str, int, int, str]:
         # Get context from kwargs
         ctx = kwargs.get('ctx', {})
-        print(f"🔍 DEBUG: ComfyUI generate called with prompt='{prompt}', model='{model}', aspect_ratio='{aspect_ratio}'")
-        print(f"🔍 DEBUG: ComfyUI context: {ctx}")
+        print(f"🎨 ComfyUI generating: {model}")
 
         api_url = config_service.app_config.get('comfyui', {}).get('url', '')
-        print(f"🔍 DEBUG: ComfyUI API URL from config: {api_url}")
 
         if not api_url:
             raise Exception("ComfyUI URL not configured")
@@ -73,11 +71,9 @@ class ComfyUIGenerator(ImageGenerator):
         api_url = api_url.replace('http://', '').replace('https://', '')
         host = api_url.split(':')[0]
         port = api_url.split(':')[1]
-        print(f"🔍 DEBUG: ComfyUI host={host}, port={port}")
 
         # Handle flux-kontext model
         if 'kontext' in model:
-            print(f"🔍 DEBUG: Using flux-kontext workflow for model: {model}")
             if not self.flux_kontext_workflow:
                 raise Exception('Flux kontext workflow json not found')
             return await self._run_flux_kontext_workflow(prompt, input_image, host, port, ctx)
@@ -100,15 +96,12 @@ class ComfyUIGenerator(ImageGenerator):
             workflow['4']['inputs']['ckpt_name'] = model
             print(f"🔍 DEBUG: Basic workflow configured with prompt and model")
 
-        print(f"🔍 DEBUG: Executing ComfyUI workflow...")
         execution = await execute(workflow, host, port, ctx=ctx)
-        print('🦄 DEBUG: ComfyUI execution outputs:', execution.outputs)
 
         if not execution.outputs:
             raise Exception("No outputs from ComfyUI execution")
 
         url = execution.outputs[0]
-        print(f"🔍 DEBUG: ComfyUI output URL: {url}")
 
         # get image dimensions
         image_id = generate_image_id()
@@ -138,7 +131,6 @@ class ComfyUIGenerator(ImageGenerator):
         workflow['31']['inputs']['seed'] = random.randint(0, 99999999998)
 
         execution = await execute(workflow, host, port, ctx=ctx)
-        print('🦄flux kontext execution outputs', execution.outputs)
 
         if not execution.outputs:
             raise Exception('No outputs from flux kontext workflow')

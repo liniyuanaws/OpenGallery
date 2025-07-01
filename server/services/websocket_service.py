@@ -26,7 +26,7 @@ async def broadcast_init_done():
         await sio.emit('init_done', {
             'type': 'init_done'
         })
-        print("Broadcasted init_done to all clients")
+        print("🚀 System initialized")
     except Exception as e:
         print(f"Error broadcasting init_done: {e}")
         traceback.print_exc()

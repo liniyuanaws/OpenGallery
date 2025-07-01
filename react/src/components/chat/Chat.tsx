@@ -76,6 +76,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [pending, setPending] = useState<PendingType>(
     initCanvas ? 'text' : false
   )
+  const [currentImageContext, setCurrentImageContext] = useState<string>('')
 
   const sessionId = session?.id
 
@@ -344,15 +345,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     sessionIdRef.current = sessionId
 
-    const resp = await fetch('/api/chat_session/' + sessionId)
-    const data = await resp.json()
-    const msgs = data?.length ? data : []
-    setMessages(msgs)
-    if (msgs.length > 0) {
-      setInitCanvas(false)
-    }
+    try {
+      const { getChatSession } = await import('@/api/chat')
+      const { messages: msgs, lastImageId } = await getChatSession(sessionId)
 
-    scrollToBottom()
+      setMessages(msgs)
+      setCurrentImageContext(lastImageId)
+
+      if (msgs.length > 0) {
+        setInitCanvas(false)
+      }
+
+      // 如果有图像上下文，在控制台输出调试信息
+      if (lastImageId) {
+        console.log(`📸 Loaded image context: ${lastImageId}`)
+      }
+
+      scrollToBottom()
+    } catch (error) {
+      console.error('Error loading chat session:', error)
+      // 降级处理：直接调用原始API
+      const resp = await fetch('/api/chat_session/' + sessionId)
+      const data = await resp.json()
+
+      let msgs = []
+      if (Array.isArray(data)) {
+        msgs = data
+      } else if (data && data.messages) {
+        msgs = data.messages
+      }
+
+      setMessages(msgs)
+      setCurrentImageContext('')
+
+      if (msgs.length > 0) {
+        setInitCanvas(false)
+      }
+
+      scrollToBottom()
+    }
   }, [sessionId, scrollToBottom, setInitCanvas])
 
   useEffect(() => {
@@ -446,6 +477,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onClickNewChat={onClickNewChat}
             onSelectSession={onSelectSession}
           />
+          {currentImageContext && (
+            <div className="flex items-center ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 rounded-md text-xs text-blue-800 dark:text-blue-200">
+              <span className="mr-1">🖼️</span>
+              <span>Image context available</span>
+            </div>
+          )}
           <Blur className="absolute top-0 left-0 right-0 h-full" />
         </header>
 

@@ -3,7 +3,6 @@ from services.websocket_state import sio, add_connection, remove_connection
 
 @sio.event
 async def connect(sid, environ, auth):
-    print(f"Client {sid} connected")
     
     user_info = auth or {}
     add_connection(sid, user_info)

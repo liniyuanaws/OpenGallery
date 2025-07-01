@@ -103,6 +103,12 @@ When users request image generation:
 3. Use the generate_image_with_context tool to create the image
 4. Choose appropriate aspect ratios based on the content
 
+IMPORTANT - Image Context Usage:
+- The tool has use_previous_image=True by default, which automatically uses the most recent image from this conversation
+- Use use_previous_image=TRUE when the user wants to EDIT, MODIFY, or BUILD UPON an existing image (e.g., "change the dress color", "add a hat", "remove the background")
+- Use use_previous_image=FALSE when the user wants a COMPLETELY NEW, UNRELATED image or explicitly asks for a "new image"
+- If no previous image exists in the conversation, the tool will inform you appropriately
+
 For other tasks, use your general knowledge and reasoning capabilities.
 Be helpful, accurate, and creative in your responses.
 """
@@ -118,16 +124,12 @@ Be helpful, accurate, and creative in your responses.
             user_prompt = "Hello, how can I help you?"
 
         # 使用上下文管理器
-        print(f"🔍 DEBUG: Before context - image_model parameter: {image_model}")
         with SessionContextManager(session_id, canvas_id, {'image': image_model}):
-            print(f"🔍 DEBUG: Starting stream call with prompt: {user_prompt}")
-            print(f"🔍 DEBUG: Session context - session_id: {session_id}, canvas_id: {canvas_id}")
-            print(f"🔍 DEBUG: Image model in context: {image_model}")
+            print(f"💬 Processing: {user_prompt[:50]}...")
 
             # 验证上下文是否正确设置
             from services.strands_context import get_image_model
             context_image_model = get_image_model()
-            print(f"🔍 DEBUG: Retrieved image model from context: {context_image_model}")
 
             # 创建带有上下文信息的图像生成工具
             from tools.strands_image_generators import create_generate_image_with_context
@@ -162,7 +164,7 @@ Be helpful, accurate, and creative in your responses.
                 else:
                     response_text = str(response)
 
-                print(f"🔍 DEBUG: Sending synchronous response to websocket: {response_text[:200]}...")
+
 
                 # 发送 delta 事件到 WebSocket
                 await send_to_websocket(session_id, {
@@ -176,13 +178,10 @@ Be helpful, accurate, and creative in your responses.
                         'role': 'assistant',
                         'content': response_text
                     }
-                    print(f"🔍 DEBUG: Saving text message to database for session {session_id}")
                     await db_service.create_message(session_id, 'assistant', json.dumps(text_message))
-                    print(f"🔍 DEBUG: Text message saved to database")
 
             except Exception as e:
-                print(f"🔍 DEBUG: Synchronous call error: {e}")
-                print(f"🔍 DEBUG: Error traceback: {traceback.format_exc()}")
+                print(f"❌ Agent error: {e}")
                 await send_to_websocket(session_id, {
                     'type': 'error',
                     'error': str(e)
@@ -280,15 +279,14 @@ For analysis, research, or data processing tasks, use your own reasoning capabil
                 else:
                     response_text = str(response)
 
-                print(f"🔍 DEBUG: Sending synchronous multi-agent response to websocket: {response_text[:200]}...")
+
                 await send_to_websocket(session_id, {
                     'type': 'delta',
                     'text': response_text
                 })
 
             except Exception as e:
-                print(f"🔍 DEBUG: Synchronous multi-agent call error: {e}")
-                print(f"🔍 DEBUG: Error traceback: {traceback.format_exc()}")
+                print(f"❌ Multi-agent error: {e}")
                 await send_to_websocket(session_id, {
                     'type': 'error',
                     'error': str(e)

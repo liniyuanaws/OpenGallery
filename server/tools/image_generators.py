@@ -142,7 +142,7 @@ async def generate_image(
 
         image_url = f"http://localhost:{DEFAULT_PORT}/api/file/{filename}"
 
-        print('🛠️canvas_data', canvas_data)
+
 
         await db_service.save_canvas_data(canvas_id, json.dumps(canvas_data['data']))
 

@@ -138,7 +138,7 @@ echo "⏳ Waiting for services to start..."
 sleep 5
 
 # Check if services are running
-echo "🔍 Checking service status..."
+echo "🔍 Checking services..."
 
 if ps -p $BACKEND_PID > /dev/null; then
     echo "✅ Backend is running (PID: $BACKEND_PID)"

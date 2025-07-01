@@ -84,6 +84,6 @@ if __name__ == "__main__":
                         help='Port to run the server on')
     args = parser.parse_args()
     import uvicorn
-    print("🌟Starting server, UI_DIST_DIR:", os.environ.get('UI_DIST_DIR'))
+    print("🌟 Starting Jaaz server...")
 
     uvicorn.run(socket_app, host="0.0.0.0", port=args.port)
