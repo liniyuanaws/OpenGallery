@@ -85,7 +85,7 @@ class ComfyUIGenerator(ImageGenerator):
                 raise Exception('Flux workflow json not found')
             workflow = copy.deepcopy(self.flux_comfy_workflow)
             workflow['6']['inputs']['text'] = prompt
-            workflow['30']['inputs']['ckpt_name'] = model
+            workflow['31']['inputs']['seed'] = random.randint(0, 99999999998)
             print(f"🔍 DEBUG: Flux workflow configured with prompt and model")
         else:
             print(f"🔍 DEBUG: Using basic workflow for model: {model}")
