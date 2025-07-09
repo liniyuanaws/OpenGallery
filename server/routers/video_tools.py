@@ -81,7 +81,7 @@ async def generate_video_tool(
         })
 
         # update the canvas data, add the new video element
-        canvas_data = await db_service.get_canvas_data(canvas_id)
+        canvas_data = db_service.get_canvas_data(canvas_id)
         if 'data' not in canvas_data:
             canvas_data['data'] = {}
         if 'elements' not in canvas_data['data']:

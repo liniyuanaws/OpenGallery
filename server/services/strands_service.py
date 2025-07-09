@@ -178,7 +178,7 @@ Be helpful, accurate, and creative in your responses.
                         'role': 'assistant',
                         'content': response_text
                     }
-                    await db_service.create_message(session_id, 'assistant', json.dumps(text_message))
+                    db_service.create_message(session_id, 'assistant', json.dumps(text_message))
 
             except Exception as e:
                 print(f"❌ Agent error: {e}")

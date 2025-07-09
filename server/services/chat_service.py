@@ -45,9 +45,9 @@ async def handle_chat(data):
         # create new session
         prompt = messages[0].get('content', '')
         # TODO: Better way to determin when to create new chat session.
-        await db_service.create_chat_session(session_id, text_model.get('model'), text_model.get('provider'), canvas_id, (prompt[:200] if isinstance(prompt, str) else ''))
+        db_service.create_chat_session(session_id, text_model.get('model'), text_model.get('provider'), canvas_id, (prompt[:200] if isinstance(prompt, str) else ''))
 
-    await db_service.create_message(session_id, messages[-1].get('role', 'user'), json.dumps(messages[-1])) if len(messages) > 0 else None
+    db_service.create_message(session_id, messages[-1].get('role', 'user'), json.dumps(messages[-1])) if len(messages) > 0 else None
 
     # Create and start strands agent task for chat processing
     task = asyncio.create_task(strands_agent(

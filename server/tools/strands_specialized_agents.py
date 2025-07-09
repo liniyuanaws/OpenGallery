@@ -126,6 +126,6 @@ def get_specialized_agents():
     """返回所有专门化agent工具的列表"""
     return [
         planner_agent,
-        # image_designer_agent 已移除 - 主Agent直接使用generate_image_with_context
+        image_designer_agent
         # coordinator_agent 已移除 - 主Agent直接承担协调职责
     ]

@@ -97,7 +97,7 @@ def generate_file_id():
     return 'im_' + generate(size=8)
 
 
-async def get_most_recent_image_from_session(session_id: str) -> str:
+def get_most_recent_image_from_session(session_id: str) -> str:
     """
     从指定session中获取最近的图像ID（包括用户上传的和助手生成的）
 
@@ -109,7 +109,7 @@ async def get_most_recent_image_from_session(session_id: str) -> str:
     """
     try:
         # 获取session的聊天历史
-        messages = await db_service.get_chat_history(session_id)
+        messages = db_service.get_chat_history(session_id)
 
         # 从最新的消息开始查找图像消息
         for i, message in enumerate(reversed(messages)):
@@ -212,7 +212,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                 print(f"� Using previous image from session")
                 try:
                     # Get the most recent image from the current session
-                    previous_image_id = run_async_safe(get_most_recent_image_from_session(session_id))
+                    previous_image_id = get_most_recent_image_from_session(session_id)
                     if previous_image_id:
                         # Convert the file to base64
                         try:
@@ -220,7 +220,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                             file_record = None
                             file_id_without_ext = previous_image_id.split('.')[0] if '.' in previous_image_id else previous_image_id
                             try:
-                                file_record = run_async_safe(db_service.get_file(file_id_without_ext))
+                                file_record = db_service.get_file(file_id_without_ext)
                             except Exception as db_error:
                                 pass  # 静默处理数据库查找错误
 
@@ -294,7 +294,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                     # Assume it's already base64 encoded
                     processed_input_image = input_image
 
-            # Generate image using thread-safe approach
+            # Generate image using async generator (必须保持异步)
             try:
                 file_id, width, height, file_path = run_async_safe(generator.generate(
                     prompt=prompt,
@@ -309,10 +309,10 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
 
             print(f"✅ Generated image: {file_id} ({width}x{height})")
 
-            # Save to database using thread-safe approach to avoid database locking
+            # Save to database using synchronous operations
             try:
                 # 保存文件记录
-                run_async_safe(db_service.create_file(file_id, file_path, width, height))
+                db_service.create_file(file_id, file_path, width, height)
 
                 # 保存图像消息和广播websocket
                 if session_id:
@@ -329,7 +329,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                         ]
                     }
 
-                    run_async_safe(db_service.create_message(session_id, 'assistant', json.dumps(image_message)))
+                    db_service.create_message(session_id, 'assistant', json.dumps(image_message))
 
                     # Broadcast file_generated event to websocket
                     message_data = {

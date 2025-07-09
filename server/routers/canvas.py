@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/canvas")
 
 @router.get("/list")
 async def list_canvases():
-    return await db_service.list_canvases()
+    return db_service.list_canvases()
 
 @router.post("/create")
 async def create_canvas(request: Request):
@@ -18,28 +18,28 @@ async def create_canvas(request: Request):
     name = data.get('name')
 
     asyncio.create_task(handle_chat(data))
-    await db_service.create_canvas(id, name)
+    db_service.create_canvas(id, name)
     return {"id": id }
 
 @router.get("/{id}")
 async def get_canvas(id: str):
-    return await db_service.get_canvas_data(id)
+    return db_service.get_canvas_data(id)
 
 @router.post("/{id}/save")
 async def save_canvas(id: str, request: Request):
     payload = await request.json()
     data_str = json.dumps(payload['data'])
-    await db_service.save_canvas_data(id, data_str, payload['thumbnail'])
+    db_service.save_canvas_data(id, data_str, payload['thumbnail'])
     return {"id": id }
 
 @router.post("/{id}/rename")
 async def rename_canvas(id: str, request: Request):
     data = await request.json()
     name = data.get('name')
-    await db_service.rename_canvas(id, name)
+    db_service.rename_canvas(id, name)
     return {"id": id }
 
 @router.delete("/{id}/delete")
 async def delete_canvas(id: str):
-    await db_service.delete_canvas(id)
+    db_service.delete_canvas(id)
     return {"id": id }

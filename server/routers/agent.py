@@ -89,13 +89,13 @@ async def list_chat_sessions():
 @router.get("/chat_session/{session_id}")
 async def get_chat_session(session_id: str):
     """获取聊天历史和最后一幅图像信息"""
-    messages = await db_service.get_chat_history(session_id)
+    messages = db_service.get_chat_history(session_id)
 
     # 获取最后一幅图像
     last_image_id = ""
     try:
         from tools.strands_image_generators import get_most_recent_image_from_session
-        last_image_id = await get_most_recent_image_from_session(session_id)
+        last_image_id = get_most_recent_image_from_session(session_id)
     except Exception as e:
         print(f"❌ Error getting last image for session {session_id}: {e}")
 
@@ -109,7 +109,7 @@ async def get_chat_session_status(session_id: str):
     """获取会话状态，包括消息和处理状态"""
     from services.stream_service import get_stream_task
 
-    messages = await db_service.get_chat_history(session_id)
+    messages = db_service.get_chat_history(session_id)
     task = get_stream_task(session_id)
     is_processing = task is not None and not task.done()
 

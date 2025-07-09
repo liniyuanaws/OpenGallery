@@ -199,7 +199,7 @@ class DynamoDBService:
         return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
     # Canvas operations
-    async def create_canvas(self, id: str, name: str):
+    def create_canvas(self, id: str, name: str):
         """Create a new canvas"""
         table = self.dynamodb.Table(self.tables['canvases'])
         timestamp = self._get_current_timestamp()
@@ -215,7 +215,7 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    async def list_canvases(self) -> List[Dict[str, Any]]:
+    def list_canvases(self) -> List[Dict[str, Any]]:
         """Get all canvases"""
         table = self.dynamodb.Table(self.tables['canvases'])
 
@@ -227,14 +227,14 @@ class DynamoDBService:
 
         return items
 
-    async def get_canvas(self, id: str) -> Optional[Dict[str, Any]]:
+    def get_canvas(self, id: str) -> Optional[Dict[str, Any]]:
         """Get canvas by ID"""
         table = self.dynamodb.Table(self.tables['canvases'])
 
         response = table.get_item(Key={'id': id})
         return response.get('Item')
 
-    async def save_canvas_data(self, id: str, data: str, thumbnail: str = None):
+    def save_canvas_data(self, id: str, data: str, thumbnail: str = None):
         """Save canvas data"""
         table = self.dynamodb.Table(self.tables['canvases'])
         timestamp = self._get_current_timestamp()
@@ -257,7 +257,7 @@ class DynamoDBService:
             ExpressionAttributeValues=expression_attribute_values
         )
 
-    async def rename_canvas(self, id: str, name: str):
+    def rename_canvas(self, id: str, name: str):
         """Rename canvas"""
         table = self.dynamodb.Table(self.tables['canvases'])
         timestamp = self._get_current_timestamp()
@@ -272,13 +272,13 @@ class DynamoDBService:
             }
         )
 
-    async def delete_canvas(self, id: str):
+    def delete_canvas(self, id: str):
         """Delete canvas"""
         table = self.dynamodb.Table(self.tables['canvases'])
         table.delete_item(Key={'id': id})
 
     # Chat session operations
-    async def create_chat_session(self, id: str, model: str, provider: str, canvas_id: str, title: Optional[str] = None):
+    def create_chat_session(self, id: str, model: str, provider: str, canvas_id: str, title: Optional[str] = None):
         """Save a new chat session"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
         timestamp = self._get_current_timestamp()
@@ -295,7 +295,7 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    async def list_chat_sessions(self, canvas_id: str) -> List[Dict[str, Any]]:
+    def list_chat_sessions(self, canvas_id: str) -> List[Dict[str, Any]]:
         """Get chat sessions for a canvas"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
 
@@ -308,14 +308,14 @@ class DynamoDBService:
 
         return response.get('Items', [])
 
-    async def get_chat_session(self, id: str) -> Optional[Dict[str, Any]]:
+    def get_chat_session(self, id: str) -> Optional[Dict[str, Any]]:
         """Get chat session by ID"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
 
         response = table.get_item(Key={'id': id})
         return response.get('Item')
 
-    async def update_chat_session_title(self, id: str, title: str):
+    def update_chat_session_title(self, id: str, title: str):
         """Update chat session title"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
         timestamp = self._get_current_timestamp()
@@ -329,13 +329,13 @@ class DynamoDBService:
             }
         )
 
-    async def delete_chat_session(self, id: str):
+    def delete_chat_session(self, id: str):
         """Delete chat session"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
         table.delete_item(Key={'id': id})
 
     # Chat message operations
-    async def create_message(self, session_id: str, role: str, message: str):
+    def create_message(self, session_id: str, role: str, message: str):
         """Save a chat message"""
         table = self.dynamodb.Table(self.tables['chat_messages'])
         timestamp = self._get_current_timestamp()
@@ -356,7 +356,7 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    async def list_messages(self, session_id: str) -> List[Dict[str, Any]]:
+    def list_messages(self, session_id: str) -> List[Dict[str, Any]]:
         """Get messages for a chat session"""
         table = self.dynamodb.Table(self.tables['chat_messages'])
 
@@ -373,7 +373,7 @@ class DynamoDBService:
         return items
 
     # ComfyUI workflow operations
-    async def create_comfy_workflow(self, name: str, api_json: str, description: str, inputs: str, outputs: str = None):
+    def create_comfy_workflow(self, name: str, api_json: str, description: str, inputs: str, outputs: str = None):
         """Create a new comfy workflow"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
         timestamp = self._get_current_timestamp()
@@ -392,7 +392,7 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    async def list_comfy_workflows(self) -> List[Dict[str, Any]]:
+    def list_comfy_workflows(self) -> List[Dict[str, Any]]:
         """List all comfy workflows"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
 
@@ -404,20 +404,20 @@ class DynamoDBService:
 
         return items
 
-    async def get_comfy_workflow(self, id: int) -> Optional[Dict[str, Any]]:
+    def get_comfy_workflow(self, id: int) -> Optional[Dict[str, Any]]:
         """Get comfy workflow by ID"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
 
         response = table.get_item(Key={'id': str(id)})
         return response.get('Item')
 
-    async def delete_comfy_workflow(self, id: int):
+    def delete_comfy_workflow(self, id: int):
         """Delete a comfy workflow"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
         table.delete_item(Key={'id': str(id)})
 
     # File operations
-    async def create_file(self, file_id: str, file_path: str, width: int = None, height: int = None):
+    def create_file(self, file_id: str, file_path: str, width: int = None, height: int = None):
         """Create a new file record"""
         table = self.dynamodb.Table(self.tables['files'])
         timestamp = self._get_current_timestamp()
@@ -436,14 +436,14 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    async def get_file(self, file_id: str) -> Optional[Dict[str, Any]]:
+    def get_file(self, file_id: str) -> Optional[Dict[str, Any]]:
         """Get file record by ID"""
         table = self.dynamodb.Table(self.tables['files'])
 
         response = table.get_item(Key={'id': file_id})
         return response.get('Item')
 
-    async def list_files(self) -> List[Dict[str, Any]]:
+    def list_files(self) -> List[Dict[str, Any]]:
         """List all files"""
         table = self.dynamodb.Table(self.tables['files'])
 
@@ -455,13 +455,13 @@ class DynamoDBService:
 
         return items
 
-    async def delete_file(self, file_id: str):
+    def delete_file(self, file_id: str):
         """Delete a file record"""
         table = self.dynamodb.Table(self.tables['files'])
         table.delete_item(Key={'id': file_id})
 
     # Database version operations
-    async def get_db_version(self) -> int:
+    def get_db_version(self) -> int:
         """Get current database version"""
         table = self.dynamodb.Table(self.tables['db_version'])
 
@@ -474,7 +474,7 @@ class DynamoDBService:
         # Return the highest version number
         return max(int(item['version']) for item in items)
 
-    async def set_db_version(self, version: int):
+    def set_db_version(self, version: int):
         """Set database version"""
         table = self.dynamodb.Table(self.tables['db_version'])
 

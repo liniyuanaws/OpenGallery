@@ -58,7 +58,7 @@ async def upload_image(file: UploadFile = File(...)):
 async def get_file(file_id: str):
     # 首先尝试从数据库获取文件信息
     try:
-        file_record = await db_service.get_file(file_id)
+        file_record = db_service.get_file(file_id)
         if file_record:
             # 数据库中有记录，使用数据库中的文件路径
             file_path = os.path.join(FILES_DIR, file_record['file_path'])
