@@ -1,3 +1,5 @@
+import { authenticatedFetch } from './auth'
+
 export async function listModels(): Promise<
   {
     provider: string
@@ -6,6 +8,9 @@ export async function listModels(): Promise<
     url: string
   }[]
 > {
-  const response = await fetch('/api/list_models')
+  const response = await authenticatedFetch('/api/list_models')
+  if (!response.ok) {
+    throw new Error(`Failed to list models: ${response.status}`)
+  }
   return await response.json()
 }

@@ -1,7 +1,11 @@
 import { Message, Model } from '@/types/types'
+import { authenticatedFetch } from './auth'
 
 export const getChatSession = async (sessionId: string) => {
-  const response = await fetch(`/api/chat_session/${sessionId}`)
+  const response = await authenticatedFetch(`/api/chat_session/${sessionId}`)
+  if (!response.ok) {
+    throw new Error(`Failed to get chat session: ${response.status}`)
+  }
   const data = await response.json()
 
   // 处理新的API响应格式
@@ -36,11 +40,8 @@ export const sendMessages = async (payload: {
   // 添加调试日志
   console.log('🔍 DEBUG: Sending to backend - imageModel:', payload.imageModel)
 
-  const response = await fetch(`/api/chat`, {
+  const response = await authenticatedFetch(`/api/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({
       messages: payload.newMessages,
       canvas_id: payload.canvasId,
@@ -50,13 +51,19 @@ export const sendMessages = async (payload: {
       system_prompt: payload.systemPrompt,
     }),
   })
+  if (!response.ok) {
+    throw new Error(`Failed to send messages: ${response.status}`)
+  }
   const data = await response.json()
   return data as Message[]
 }
 
 export const cancelChat = async (sessionId: string) => {
-  const response = await fetch(`/api/cancel/${sessionId}`, {
+  const response = await authenticatedFetch(`/api/cancel/${sessionId}`, {
     method: 'POST',
   })
+  if (!response.ok) {
+    throw new Error(`Failed to cancel chat: ${response.status}`)
+  }
   return await response.json()
 }

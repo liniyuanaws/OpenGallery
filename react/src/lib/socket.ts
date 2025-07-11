@@ -1,6 +1,7 @@
 import * as ISocket from '@/types/socket'
 import { io, Socket } from 'socket.io-client'
 import { eventBus } from './event'
+import { getAccessToken, getUserProfile } from '@/api/auth'
 
 export interface SocketConfig {
   serverUrl?: string
@@ -27,11 +28,25 @@ export class SocketIOManager {
   }
 
   connect(serverUrl?: string): Promise<boolean> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const url = serverUrl || this.config.serverUrl
 
       if (this.socket) {
         this.socket.disconnect()
+      }
+
+      // Prepare authentication data
+      const token = getAccessToken()
+      let authData: any = {}
+
+      if (token) {
+        authData.token = token
+        try {
+          const userInfo = await getUserProfile()
+          authData.user_info = userInfo
+        } catch (error) {
+          console.warn('Failed to get user profile for WebSocket auth:', error)
+        }
       }
 
       this.socket = io(url, {
@@ -43,6 +58,7 @@ export class SocketIOManager {
         reconnectionDelayMax: 10000,  // 最大重连延迟10秒
         timeout: 30000,               // 连接超时30秒
         forceNew: true,               // 强制创建新连接
+        auth: authData,               // 添加身份验证数据
       })
 
       this.socket.on('connect', () => {
@@ -238,7 +254,16 @@ export class SocketIOManager {
 
   private async pollSessionUpdates(sessionId: string) {
     try {
-      const response = await fetch(`/api/chat_session/${sessionId}/status`)
+      // Use authenticated fetch for polling
+      const token = getAccessToken()
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(`/api/chat_session/${sessionId}/status`, {
+        headers
+      })
       if (!response.ok) {
         return
       }
