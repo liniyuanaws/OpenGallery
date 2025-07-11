@@ -1,6 +1,6 @@
 import os
 import time
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 import requests
 from services.config_service import config_service
 from services.db_service import db_service
@@ -83,39 +83,68 @@ async def get_models():
 
 @router.get("/list_chat_sessions")
 async def list_chat_sessions():
-    return await db_service.list_sessions()
+    """List all chat sessions for the authenticated user"""
+    try:
+        return db_service.list_all_user_sessions()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list chat sessions: {str(e)}"
+        )
 
 
 @router.get("/chat_session/{session_id}")
 async def get_chat_session(session_id: str):
-    """获取聊天历史和最后一幅图像信息"""
-    messages = db_service.get_chat_history(session_id)
-
-    # 获取最后一幅图像
-    last_image_id = ""
+    """Get chat history and last image info for the authenticated user"""
     try:
-        from tools.strands_image_generators import get_most_recent_image_from_session
-        last_image_id = get_most_recent_image_from_session(session_id)
-    except Exception as e:
-        print(f"❌ Error getting last image for session {session_id}: {e}")
+        messages = db_service.get_chat_history(session_id)
 
-    return {
-        "messages": messages,
-        "last_image_id": last_image_id
-    }
+        # 获取最后一幅图像
+        last_image_id = ""
+        try:
+            from tools.strands_image_generators import get_most_recent_image_from_session
+            last_image_id = get_most_recent_image_from_session(session_id)
+        except Exception as e:
+            print(f"❌ Error getting last image for session {session_id}: {e}")
+
+        return {
+            "messages": messages,
+            "last_image_id": last_image_id
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get chat session: {str(e)}"
+        )
 
 @router.get("/chat_session/{session_id}/status")
 async def get_chat_session_status(session_id: str):
-    """获取会话状态，包括消息和处理状态"""
-    from services.stream_service import get_stream_task
+    """Get session status including messages and processing state for the authenticated user"""
+    try:
+        from services.stream_service import get_stream_task
 
-    messages = db_service.get_chat_history(session_id)
-    task = get_stream_task(session_id)
-    is_processing = task is not None and not task.done()
+        messages = db_service.get_chat_history(session_id)
+        task = get_stream_task(session_id)
+        is_processing = task is not None and not task.done()
 
-    return {
-        "session_id": session_id,
-        "messages": messages,
-        "is_processing": is_processing,
-        "timestamp": int(time.time() * 1000)  # 毫秒时间戳
-    }
+        return {
+            "session_id": session_id,
+            "messages": messages,
+            "is_processing": is_processing,
+            "timestamp": int(time.time() * 1000)  # 毫秒时间戳
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get chat session status: {str(e)}"
+        )

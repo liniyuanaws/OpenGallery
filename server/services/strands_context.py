@@ -13,15 +13,25 @@ _session_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVa
 
 
 def set_session_context(
-    session_id: str, 
-    canvas_id: str, 
+    session_id: str,
+    canvas_id: str,
     model_info: Optional[Dict[str, Any]] = None,
-    tool_call_id: Optional[str] = None
+    tool_call_id: Optional[str] = None,
+    user_id: Optional[str] = None
 ):
     """设置会话上下文"""
+    # Try to get user_id from user context if not provided
+    if not user_id:
+        try:
+            from services.user_context import get_current_user_id
+            user_id = get_current_user_id()
+        except:
+            user_id = None
+
     context = {
         'session_id': session_id,
         'canvas_id': canvas_id,
+        'user_id': user_id,
         'model_info': model_info or {},
         'tool_call_id': tool_call_id
     }
@@ -43,6 +53,11 @@ def get_canvas_id() -> str:
     return get_session_context().get('canvas_id', '')
 
 
+def get_user_id() -> str:
+    """获取当前user_id"""
+    return get_session_context().get('user_id', '')
+
+
 def get_model_info() -> Dict[str, Any]:
     """获取当前模型信息"""
     return get_session_context().get('model_info', {})
@@ -61,18 +76,19 @@ def get_image_model() -> Dict[str, Any]:
 
 class SessionContextManager:
     """会话上下文管理器"""
-    
-    def __init__(self, session_id: str, canvas_id: str, model_info: Optional[Dict[str, Any]] = None):
+
+    def __init__(self, session_id: str, canvas_id: str, model_info: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None):
         self.session_id = session_id
         self.canvas_id = canvas_id
         self.model_info = model_info or {}
+        self.user_id = user_id
         self.previous_context = None
-    
+
     def __enter__(self):
         self.previous_context = get_session_context()
-        set_session_context(self.session_id, self.canvas_id, self.model_info)
+        set_session_context(self.session_id, self.canvas_id, self.model_info, user_id=self.user_id)
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.previous_context:
             _session_context.set(self.previous_context)

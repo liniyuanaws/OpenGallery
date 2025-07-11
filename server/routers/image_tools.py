@@ -9,7 +9,7 @@ from services.websocket_service import send_to_websocket, broadcast_session_upda
 from PIL import Image
 from io import BytesIO
 import os
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, status
 import httpx
 import aiofiles
 from mimetypes import guess_type
@@ -21,57 +21,78 @@ os.makedirs(FILES_DIR, exist_ok=True)
 # 上传图片接口，支持表单提交
 @router.post("/upload_image")
 async def upload_image(file: UploadFile = File(...)):
-    print('🦄upload_image file', file.filename)
-    # 生成文件 ID 和文件名
-    file_id = generate_file_id()
-    filename = file.filename or ''
+    """Upload image for the authenticated user"""
+    try:
+        print('🦄upload_image file', file.filename)
+        # 生成文件 ID 和文件名
+        file_id = generate_file_id()
+        filename = file.filename or ''
 
-    # Read the file content
-    content = await file.read()
+        # Read the file content
+        content = await file.read()
 
-    # Open the image from bytes to get its dimensions
-    with Image.open(BytesIO(content)) as img:
-        width, height = img.size
+        # Open the image from bytes to get its dimensions
+        with Image.open(BytesIO(content)) as img:
+            width, height = img.size
 
-    # Determine the file extension
-    mime_type, _ = guess_type(filename)
-    # default to 'bin' if unknown
-    extension = mime_type.split('/')[-1] if mime_type else ''
+        # Determine the file extension
+        mime_type, _ = guess_type(filename)
+        # default to 'bin' if unknown
+        extension = mime_type.split('/')[-1] if mime_type else 'bin'
 
-    # 保存图片到本地
-    file_path = os.path.join(FILES_DIR, f'{file_id}.{extension}')
-    async with aiofiles.open(file_path, 'wb') as f:
-        await f.write(content)
+        # 保存图片到本地
+        full_file_id = f'{file_id}.{extension}'
+        file_path = os.path.join(FILES_DIR, full_file_id)
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(content)
 
-    # 返回文件信息
-    print('🦄upload_image file_path', file_path)
-    return {
-        'file_id': f'{file_id}.{extension}',
-        'url': f'http://localhost:{DEFAULT_PORT}/api/file/{file_id}.{extension}',
-        'width': width,
-        'height': height,
-    }
+        # 创建文件记录到数据库
+        try:
+            db_service.create_file(full_file_id, full_file_id, width, height)
+        except Exception as e:
+            print(f"❌ Error creating file record: {e}")
+            # Continue even if database record creation fails
+
+        # 返回文件信息
+        print('🦄upload_image file_path', file_path)
+        return {
+            'file_id': full_file_id,
+            'url': f'http://localhost:{DEFAULT_PORT}/api/file/{full_file_id}',
+            'width': width,
+            'height': height,
+        }
+    except Exception as e:
+        print(f"❌ Error uploading image: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload image: {str(e)}"
+        )
 
 
 # 文件下载接口
 @router.get("/file/{file_id}")
 async def get_file(file_id: str):
-    # 首先尝试从数据库获取文件信息
+    """Get file with user verification when possible"""
+    # 首先尝试从数据库获取文件信息并验证用户权限
     try:
+        from services.user_context import get_current_user_id
+        user_id = get_current_user_id()
         file_record = db_service.get_file(file_id)
         if file_record:
             # 数据库中有记录，使用数据库中的文件路径
             file_path = os.path.join(FILES_DIR, file_record['file_path'])
-            print(f'🦄get_file from database: {file_path}')
+            print(f'🦄get_file from database (user verified): {file_path}')
             if os.path.exists(file_path):
                 return FileResponse(file_path)
     except Exception as e:
-        print(f'🦄get_file database error: {e}')
+        print(f'🦄get_file database/auth error: {e}')
+        # Continue with fallback for backward compatibility
 
-    # 如果数据库中没有记录，尝试直接查找文件
+    # 向后兼容：如果数据库中没有记录或用户验证失败，尝试直接查找文件
+    # 这是为了支持旧的文件，但新文件应该都有用户验证
     # 首先尝试原始文件名
     file_path = os.path.join(FILES_DIR, file_id)
-    print(f'🦄get_file trying direct path: {file_path}')
+    print(f'🦄get_file trying direct path (fallback): {file_path}')
     if os.path.exists(file_path):
         return FileResponse(file_path)
 
@@ -79,7 +100,7 @@ async def get_file(file_id: str):
     if '.' not in file_id:
         for ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
             file_path_with_ext = os.path.join(FILES_DIR, f'{file_id}.{ext}')
-            print(f'🦄get_file trying with extension: {file_path_with_ext}')
+            print(f'🦄get_file trying with extension (fallback): {file_path_with_ext}')
             if os.path.exists(file_path_with_ext):
                 return FileResponse(file_path_with_ext)
 

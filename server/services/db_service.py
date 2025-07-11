@@ -50,9 +50,14 @@ class DatabaseService:
         return messages
 
     def list_sessions(self, canvas_id: str) -> List[Dict[str, Any]]:
-        """List all chat sessions for the current user"""
+        """List all chat sessions for a specific canvas for the current user"""
         user_id = get_current_user_id()
         return self.user_aware_service.list_chat_sessions(canvas_id, user_id)
+
+    def list_all_user_sessions(self) -> List[Dict[str, Any]]:
+        """List all chat sessions for the current user across all canvases"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.list_user_chat_sessions(user_id)
 
     def save_canvas_data(self, id: str, data: str, thumbnail: str = None):
         """Save canvas data for the current user"""
