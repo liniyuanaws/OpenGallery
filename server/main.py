@@ -17,6 +17,7 @@ from starlette.types import Scope
 from starlette.responses import Response
 import socketio
 from services.websocket_state import sio
+from middleware.auth_middleware import AuthenticationMiddleware
 
 root_dir = os.path.dirname(__file__)
 
@@ -28,6 +29,11 @@ async def lifespan(app: FastAPI):
     # onshutdown
 
 app = FastAPI(lifespan=lifespan)
+
+# Add authentication middleware
+# Enable development mode for now - in production, set to False
+development_mode = os.environ.get('DEVELOPMENT_MODE', 'true').lower() == 'true'
+app.add_middleware(AuthenticationMiddleware, development_mode=development_mode)
 
 # Include routers
 app.include_router(config.router)

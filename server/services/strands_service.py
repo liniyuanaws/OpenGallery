@@ -18,8 +18,20 @@ except ImportError:
 
 from services.db_service import db_service
 from services.config_service import config_service
-from services.websocket_service import send_to_websocket
+from services.websocket_service import send_to_websocket, send_to_user_websocket
 from services.strands_context import SessionContextManager
+from services.user_context import get_current_user_id
+
+
+async def send_user_websocket_message(session_id: str, event: dict):
+    """Send WebSocket message to the current user"""
+    try:
+        user_id = get_current_user_id()
+        await send_to_user_websocket(session_id, event, user_id)
+    except Exception as e:
+        # Fallback to broadcast if user context is not available
+        print(f"⚠️ User context not available, falling back to broadcast: {e}")
+        await send_to_websocket(session_id, event)
 
 
 def create_model_instance(text_model: Dict[str, Any]):
@@ -167,7 +179,7 @@ Be helpful, accurate, and creative in your responses.
 
 
                 # 发送 delta 事件到 WebSocket
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'delta',
                     'text': response_text
                 })
@@ -182,20 +194,20 @@ Be helpful, accurate, and creative in your responses.
 
             except Exception as e:
                 print(f"❌ Agent error: {e}")
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'error',
                     'error': str(e)
                 })
 
         # 发送完成事件
-        await send_to_websocket(session_id, {
+        await send_user_websocket_message(session_id, {
             'type': 'done'
         })
-        
+
     except Exception as e:
         print('Error in strands_agent', e)
         traceback.print_exc()
-        await send_to_websocket(session_id, {
+        await send_user_websocket_message(session_id, {
             'type': 'error',
             'error': str(e)
         })
@@ -280,29 +292,29 @@ For analysis, research, or data processing tasks, use your own reasoning capabil
                     response_text = str(response)
 
 
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'delta',
                     'text': response_text
                 })
 
             except Exception as e:
                 print(f"❌ Multi-agent error: {e}")
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'error',
                     'error': str(e)
                 })
 
         # 发送完成事件
-        await send_to_websocket(session_id, {
+        await send_user_websocket_message(session_id, {
             'type': 'done'
         })
-        
+
     except Exception as e:
         print('Error in strands_multi_agent', e)
         tb_str = traceback.format_exc()
         print(f"Full traceback:\n{tb_str}")
         traceback.print_exc()
-        await send_to_websocket(session_id, {
+        await send_user_websocket_message(session_id, {
             'type': 'error',
             'error': str(e)
         })
@@ -323,23 +335,23 @@ async def handle_agent_event(event, session_id):
             if 'toolUse' in start:
                 tool_use = start['toolUse']
                 print(f"🔧 Tool call started: {tool_use.get('name', '')}")
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'tool_call',
                     'id': tool_use.get('toolUseId', ''),
                     'name': tool_use.get('name', ''),
                     'arguments': ''
                 })
-        
+
         # 处理文本和工具参数增量
         elif 'contentBlockDelta' in inner_event:
             delta = inner_event['contentBlockDelta']['delta']
             if 'text' in delta:
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'delta',
                     'text': delta['text']
                 })
             elif 'toolUse' in delta:
-                await send_to_websocket(session_id, {
+                await send_user_websocket_message(session_id, {
                     'type': 'tool_call_arguments',
                     'id': '',
                     'text': delta['toolUse'].get('input', '')
@@ -356,7 +368,7 @@ async def handle_agent_event(event, session_id):
         # 只处理纯文本数据，避免重复处理
         if "event_loop_metrics" in event:
             # 这是一个包含文本的数据事件
-            await send_to_websocket(session_id, {
+            await send_user_websocket_message(session_id, {
                 'type': 'delta',
                 'text': event["data"]
             })
