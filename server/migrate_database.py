@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Database migration script for multi-tenant and user authentication
+This script is now deprecated. Use switch_database_version.py instead.
 """
 import sys
 import os
@@ -8,44 +9,33 @@ import os
 # Add server directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from services.dynamodb_service import DynamoDBService
-from services.user_service import UserService
-
 
 def migrate_database():
-    """Run database migration"""
-    print("🚀 Starting database migration...")
-    
+    """Run database migration - now redirects to new version system"""
+    print("⚠️ This script is deprecated!")
+    print("🔄 Please use the new database version management system:")
+    print()
+    print("  # Switch to multi-tenant DynamoDB (recommended)")
+    print("  python server/switch_database_version.py switch --version 6")
+    print()
+    print("  # Switch to legacy DynamoDB")
+    print("  python server/switch_database_version.py switch --version 5")
+    print()
+    print("  # See all available versions")
+    print("  python server/switch_database_version.py list")
+    print()
+    print("📖 For more information, see DATABASE_VERSION_GUIDE.md")
+
+    # For backward compatibility, still run the v6 migration
+    print("\n🔄 Running version 6 migration for backward compatibility...")
     try:
-        # Initialize DynamoDB service (this will create tables if they don't exist)
-        print("📊 Initializing DynamoDB service...")
-        db_service = DynamoDBService()
-        print("✅ DynamoDB tables created/verified")
-        
-        # Initialize user service (this will create default users)
-        print("👤 Initializing user service...")
-        user_service = UserService()
-        print("✅ User service initialized with default users")
-        
-        # List existing tables
-        print("\n📋 Current DynamoDB tables:")
-        dynamodb = db_service.dynamodb
-        table_names = [table.name for table in dynamodb.tables.all()]
-        for table_name in sorted(table_names):
-            if 'jaaz' in table_name:
-                print(f"  - {table_name}")
-        
-        # List existing users
-        print("\n👥 Current users:")
-        users = user_service.list_users()
-        for user in users:
-            print(f"  - {user['username']} ({user['email']}) - Active: {user.get('is_active', True)}")
-        
-        print("\n🎉 Database migration completed successfully!")
+        from services.migrations.v6_dynamodb_multitenant_schema import V6DynamoDBMultitenantSchema
+        migration = V6DynamoDBMultitenantSchema()
+        migration.up(None)
+        print("✅ Version 6 migration completed successfully!")
         return True
-        
     except Exception as e:
-        print(f"❌ Database migration failed: {e}")
+        print(f"❌ Migration failed: {e}")
         import traceback
         traceback.print_exc()
         return False

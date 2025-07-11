@@ -97,19 +97,50 @@ def generate_file_id():
     return 'im_' + generate(size=8)
 
 
-def get_most_recent_image_from_session(session_id: str) -> str:
+def get_most_recent_image_from_session(session_id: str, user_id: str = None) -> str:
     """
     从指定session中获取最近的图像ID（包括用户上传的和助手生成的）
 
     Args:
         session_id: 会话ID
+        user_id: 用户ID，如果提供则用于用户验证
 
     Returns:
         最近图像的文件ID，如果没有找到则返回空字符串
     """
     try:
+        print(f"🔍 DEBUG: get_most_recent_image_from_session called with session_id={session_id}, user_id={user_id}")
         # 获取session的聊天历史
-        messages = db_service.get_chat_history(session_id)
+        if user_id:
+            # 如果提供了user_id，直接使用user-aware服务
+            print(f"🔍 DEBUG: Using UserContextManager with user_id={user_id}")
+            from services.user_context import UserContextManager
+            with UserContextManager(user_id):
+                messages = db_service.get_chat_history(session_id)
+                print(f"🔍 DEBUG: Successfully got {len(messages)} messages from chat history")
+        else:
+            print(f"🔍 DEBUG: No user_id provided, trying current context")
+            # 尝试从当前上下文获取user_id
+            try:
+                messages = db_service.get_chat_history(session_id)
+                print(f"🔍 DEBUG: Successfully got {len(messages)} messages from current context")
+            except Exception as auth_error:
+                print(f"🔍 DEBUG: Auth error in current context: {auth_error}")
+                # 如果认证失败，尝试从strands上下文获取user_id
+                try:
+                    from services.strands_context import get_user_id
+                    strands_user_id = get_user_id()
+                    print(f"🔍 DEBUG: Got strands_user_id: {strands_user_id}")
+                    if strands_user_id:
+                        from services.user_context import UserContextManager
+                        with UserContextManager(strands_user_id):
+                            messages = db_service.get_chat_history(session_id)
+                            print(f"🔍 DEBUG: Successfully got {len(messages)} messages with strands user context")
+                    else:
+                        raise auth_error
+                except Exception as e:
+                    print(f"🔍 DEBUG: Failed to get user from strands context: {e}")
+                    raise auth_error
 
         # 从最新的消息开始查找图像消息
         for i, message in enumerate(reversed(messages)):
@@ -159,7 +190,7 @@ PROVIDERS = {
 }
 
 
-def create_generate_image_with_context(session_id: str, canvas_id: str, image_model: dict):
+def create_generate_image_with_context(session_id: str, canvas_id: str, image_model: dict, user_id: str = None):
     """创建一个带有上下文信息的 generate_image 工具"""
     from strands import tool
 
@@ -188,6 +219,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
         print("🎨️ generate_image_with_context tool called!")
         print(f"🔍 DEBUG: Using provided context - session_id: {session_id}, canvas_id: {canvas_id}")
         print(f"🔍 DEBUG: Using provided image_model: {image_model}")
+        print(f"🔍 DEBUG: Using provided user_id: {user_id}")
         
         try:
             # 使用提供的上下文信息而不是从contextvars获取
@@ -211,8 +243,21 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
             if use_previous_image and not input_image:
                 print(f"� Using previous image from session")
                 try:
+                    # Use the user_id passed to the function
+                    effective_user_id = user_id
+                    if not effective_user_id:
+                        # Fallback: try to get user_id from strands context if not provided
+                        try:
+                            from services.strands_context import get_user_id
+                            effective_user_id = get_user_id()
+                            print(f"🔍 DEBUG: Got user_id from strands context: {effective_user_id}")
+                        except Exception as e:
+                            print(f"🔍 DEBUG: Failed to get user_id from strands context: {e}")
+                            pass
+
                     # Get the most recent image from the current session
-                    previous_image_id = get_most_recent_image_from_session(session_id)
+                    print(f"🔍 DEBUG: Calling get_most_recent_image_from_session with session_id={session_id}, user_id={effective_user_id}")
+                    previous_image_id = get_most_recent_image_from_session(session_id, effective_user_id)
                     if previous_image_id:
                         # Convert the file to base64
                         try:
@@ -311,25 +356,42 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
 
             # Save to database using synchronous operations
             try:
-                # 保存文件记录
-                db_service.create_file(file_id, file_path, width, height)
+                # Use UserContextManager to set the correct user context for database operations
+                effective_user_id = user_id
+                if not effective_user_id:
+                    # Fallback: try to get user_id from strands context
+                    try:
+                        from services.strands_context import get_user_id
+                        effective_user_id = get_user_id()
+                    except Exception:
+                        pass
 
-                # 保存图像消息和广播websocket
-                if session_id:
-                    # Create image message for database
-                    image_message = {
-                        'role': 'assistant',
-                        'content': [
-                            {
-                                'type': 'image_url',
-                                'image_url': {
-                                    'url': f'/api/file/{file_id}'
-                                }
+                if effective_user_id:
+                    from services.user_context import UserContextManager
+                    with UserContextManager(effective_user_id):
+                        # 保存文件记录
+                        db_service.create_file(file_id, file_path, width, height)
+
+                        # 保存图像消息和广播websocket
+                        if session_id:
+                            # Create image message for database
+                            image_message = {
+                                'role': 'assistant',
+                                'content': [
+                                    {
+                                        'type': 'image_url',
+                                        'image_url': {
+                                            'url': f'/api/file/{file_id}'
+                                        }
+                                    }
+                                ]
                             }
-                        ]
-                    }
 
-                    db_service.create_message(session_id, 'assistant', json.dumps(image_message))
+                            db_service.create_message(session_id, 'assistant', json.dumps(image_message))
+                else:
+                    print(f"⚠️ No user_id available for database operations, skipping database save")
+                    # Still broadcast the websocket message even if database save fails
+                    pass
 
                     # Broadcast file_generated event to websocket
                     message_data = {

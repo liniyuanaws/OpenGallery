@@ -135,8 +135,13 @@ Be helpful, accurate, and creative in your responses.
         if not user_prompt:
             user_prompt = "Hello, how can I help you?"
 
-        # 使用上下文管理器
-        with SessionContextManager(session_id, canvas_id, {'image': image_model}):
+        # 使用上下文管理器，传递当前用户ID
+        try:
+            current_user_id = get_current_user_id()
+        except Exception:
+            current_user_id = None
+
+        with SessionContextManager(session_id, canvas_id, {'image': image_model}, user_id=current_user_id):
             print(f"💬 Processing: {user_prompt[:50]}...")
 
             # 验证上下文是否正确设置
@@ -145,7 +150,7 @@ Be helpful, accurate, and creative in your responses.
 
             # 创建带有上下文信息的图像生成工具
             from tools.strands_image_generators import create_generate_image_with_context
-            contextual_generate_image = create_generate_image_with_context(session_id, canvas_id, image_model)
+            contextual_generate_image = create_generate_image_with_context(session_id, canvas_id, image_model, current_user_id)
 
             # 只使用带上下文的generate_image工具
             tools = [contextual_generate_image]
@@ -270,8 +275,13 @@ For analysis, research, or data processing tasks, use your own reasoning capabil
         if not user_prompt:
             user_prompt = "Hello, how can I help you?"
 
-        # 使用上下文管理器设置会话上下文
-        with SessionContextManager(session_id, canvas_id, {'image': image_model}):
+        # 使用上下文管理器设置会话上下文，传递当前用户ID
+        try:
+            current_user_id = get_current_user_id()
+        except Exception:
+            current_user_id = None
+
+        with SessionContextManager(session_id, canvas_id, {'image': image_model}, user_id=current_user_id):
             print(f"🔍 DEBUG: Starting multi-agent stream call with prompt: {user_prompt}")
             print(f"🔍 DEBUG: Session context - session_id: {session_id}, canvas_id: {canvas_id}")
             print(f"🔍 DEBUG: Image model: {image_model}")

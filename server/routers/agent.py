@@ -103,7 +103,9 @@ async def get_chat_session(session_id: str):
         last_image_id = ""
         try:
             from tools.strands_image_generators import get_most_recent_image_from_session
-            last_image_id = get_most_recent_image_from_session(session_id)
+            from services.user_context import get_current_user_id
+            user_id = get_current_user_id()
+            last_image_id = get_most_recent_image_from_session(session_id, user_id)
         except Exception as e:
             print(f"❌ Error getting last image for session {session_id}: {e}")
 
