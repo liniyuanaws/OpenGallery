@@ -4,12 +4,13 @@ import CanvasList from '@/components/home/CanvasList'
 import HomeHeader from '@/components/home/HomeHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useConfigs } from '@/contexts/configs'
+import { useAuth } from '@/contexts/AuthContext'
 import { DEFAULT_SYSTEM_PROMPT } from '@/constants'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { motion } from 'motion/react'
 import { nanoid } from 'nanoid'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -20,7 +21,15 @@ export const Route = createFileRoute('/')({
 function Home() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { setInitCanvas } = useConfigs()
+  const { setInitCanvas, setShowLoginDialog } = useConfigs()
+  const { authStatus, isLoading } = useAuth()
+
+  // Check authentication status and show login dialog if needed
+  useEffect(() => {
+    if (!isLoading && !authStatus.is_logged_in) {
+      setShowLoginDialog(true)
+    }
+  }, [authStatus.is_logged_in, isLoading, setShowLoginDialog])
 
   const { mutate: createCanvasMutation, isPending } = useMutation({
     mutationFn: createCanvas,
@@ -37,6 +46,36 @@ function Home() {
       })
     },
   })
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen">
+        <HomeHeader />
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render main content if not logged in
+  if (!authStatus.is_logged_in) {
+    return (
+      <div className="flex flex-col h-screen">
+        <HomeHeader />
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Welcome to Jaaz</h2>
+            <p className="text-muted-foreground mb-4">Please login to continue</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-screen">

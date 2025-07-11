@@ -10,8 +10,10 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
 import { CanvasProvider } from '@/contexts/canvas'
+import { useAuth } from '@/contexts/AuthContext'
+import { useConfigs } from '@/contexts/configs'
 import { Session } from '@/types/types'
-import { createFileRoute, useParams } from '@tanstack/react-router'
+import { createFileRoute, useParams, useNavigate } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -21,11 +23,22 @@ export const Route = createFileRoute('/canvas/$id')({
 
 function Canvas() {
   const { id } = useParams({ from: '/canvas/$id' })
+  const navigate = useNavigate()
+  const { authStatus, isLoading: authLoading } = useAuth()
+  const { setShowLoginDialog } = useConfigs()
   const [canvas, setCanvas] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const [canvasName, setCanvasName] = useState('')
   const [sessionList, setSessionList] = useState<Session[]>([])
+
+  // Check authentication
+  useEffect(() => {
+    if (!authLoading && !authStatus.is_logged_in) {
+      setShowLoginDialog(true)
+      navigate({ to: '/' })
+    }
+  }, [authStatus.is_logged_in, authLoading, setShowLoginDialog, navigate])
 
   useEffect(() => {
     let mounted = true

@@ -16,10 +16,11 @@ class DynamoDBService:
         # Table names
         self.tables = {
             'canvases': 'jaaz-canvases',
-            'chat_sessions': 'jaaz-chat-sessions', 
+            'chat_sessions': 'jaaz-chat-sessions',
             'chat_messages': 'jaaz-chat-messages',
             'comfy_workflows': 'jaaz-comfy-workflows',
             'files': 'jaaz-files',
+            'users': 'jaaz-users',
             'db_version': 'jaaz-db-version'
         }
         
@@ -210,6 +211,43 @@ class DynamoDBService:
                 ]
             )
             
+            # Create users table
+            self._create_table_if_not_exists(
+                table_name=self.tables['users'],
+                key_schema=[
+                    {'AttributeName': 'username', 'KeyType': 'HASH'}
+                ],
+                attribute_definitions=[
+                    {'AttributeName': 'username', 'AttributeType': 'S'},
+                    {'AttributeName': 'email', 'AttributeType': 'S'},
+                    {'AttributeName': 'created_at', 'AttributeType': 'S'}
+                ],
+                global_secondary_indexes=[
+                    {
+                        'IndexName': 'email-index',
+                        'KeySchema': [
+                            {'AttributeName': 'email', 'KeyType': 'HASH'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    },
+                    {
+                        'IndexName': 'created_at-index',
+                        'KeySchema': [
+                            {'AttributeName': 'created_at', 'KeyType': 'HASH'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    }
+                ]
+            )
+
             # Create db_version table
             self._create_table_if_not_exists(
                 table_name=self.tables['db_version'],
@@ -631,6 +669,99 @@ class DynamoDBService:
             raise ValueError(f"File {file_id} not found or access denied for user {user_id}")
 
         table.delete_item(Key={'id': file_id})
+
+    # User operations
+    def create_user(self, username: str, email: str, password_hash: str, user_id: str):
+        """Create a new user"""
+        table = self.dynamodb.Table(self.tables['users'])
+        timestamp = self._get_current_timestamp()
+
+        item = {
+            'username': username.lower(),
+            'user_id': user_id,
+            'email': email.lower(),
+            'password_hash': password_hash,
+            'created_at': timestamp,
+            'updated_at': timestamp,
+            'is_active': True,
+            'last_login': None
+        }
+
+        table.put_item(Item=item)
+
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user by username"""
+        table = self.dynamodb.Table(self.tables['users'])
+
+        response = table.get_item(Key={'username': username.lower()})
+        return response.get('Item')
+
+    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get user by email"""
+        table = self.dynamodb.Table(self.tables['users'])
+
+        response = table.query(
+            IndexName='email-index',
+            KeyConditionExpression='email = :email',
+            ExpressionAttributeValues={':email': email.lower()}
+        )
+
+        items = response.get('Items', [])
+        return items[0] if items else None
+
+    def update_user_last_login(self, username: str):
+        """Update user's last login timestamp"""
+        table = self.dynamodb.Table(self.tables['users'])
+        timestamp = self._get_current_timestamp()
+
+        table.update_item(
+            Key={'username': username.lower()},
+            UpdateExpression="SET last_login = :last_login, updated_at = :updated_at",
+            ExpressionAttributeValues={
+                ':last_login': timestamp,
+                ':updated_at': timestamp
+            }
+        )
+
+    def update_user_password(self, username: str, new_password_hash: str):
+        """Update user's password"""
+        table = self.dynamodb.Table(self.tables['users'])
+        timestamp = self._get_current_timestamp()
+
+        table.update_item(
+            Key={'username': username.lower()},
+            UpdateExpression="SET password_hash = :password_hash, updated_at = :updated_at",
+            ExpressionAttributeValues={
+                ':password_hash': new_password_hash,
+                ':updated_at': timestamp
+            }
+        )
+
+    def deactivate_user(self, username: str):
+        """Deactivate a user account"""
+        table = self.dynamodb.Table(self.tables['users'])
+        timestamp = self._get_current_timestamp()
+
+        table.update_item(
+            Key={'username': username.lower()},
+            UpdateExpression="SET is_active = :is_active, updated_at = :updated_at",
+            ExpressionAttributeValues={
+                ':is_active': False,
+                ':updated_at': timestamp
+            }
+        )
+
+    def list_users(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """List all users (for admin purposes)"""
+        table = self.dynamodb.Table(self.tables['users'])
+
+        response = table.scan(Limit=limit)
+        items = response.get('Items', [])
+
+        # Sort by created_at DESC
+        items.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+
+        return items
 
     # Database version operations
     def get_db_version(self) -> int:
