@@ -5,7 +5,7 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-from routers import config, agent, workspace, image_tools, canvas, chat_router, settings, device_auth
+from routers import config, agent, workspace, image_tools, canvas, chat_router, settings, device_auth, auth
 import routers.websocket_router
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +38,7 @@ app.add_middleware(AuthenticationMiddleware, development_mode=development_mode)
 # Include routers
 app.include_router(config.router)
 app.include_router(settings.router)
+app.include_router(auth.router)
 app.include_router(device_auth.router)
 app.include_router(agent.router)
 app.include_router(canvas.router)

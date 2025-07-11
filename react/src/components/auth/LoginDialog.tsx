@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { startDeviceAuth, pollDeviceAuth, saveAuthData } from '../../api/auth'
 import { updateJaazApiKey } from '../../api/config'
@@ -9,6 +12,9 @@ import { useConfigs, useRefreshModels } from '../../contexts/configs'
 
 export function LoginDialog() {
   const [authMessage, setAuthMessage] = useState('')
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' })
+  const [isLoading, setIsLoading] = useState(false)
   const { refreshAuth } = useAuth()
   const { showLoginDialog: open, setShowLoginDialog } = useConfigs()
   const refreshModels = useRefreshModels()
@@ -105,7 +111,85 @@ export function LoginDialog() {
     pollingIntervalRef.current = setInterval(poll, 1000)
   }
 
-  const handleLogin = async () => {
+  const handleUsernameLogin = async () => {
+    try {
+      setIsLoading(true)
+      setAuthMessage('')
+
+      if (!loginForm.username || !loginForm.password) {
+        setAuthMessage('Please enter username and password')
+        return
+      }
+
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm)
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.status === 'success') {
+        // Save auth data to local storage
+        saveAuthData(result.token, result.user_info)
+
+        // Update jaaz provider api_key with the access token
+        await updateJaazApiKey(result.token)
+
+        setAuthMessage('Login successful!')
+
+        // Refresh auth status
+        await refreshAuth()
+        refreshModels()
+
+        setTimeout(() => setShowLoginDialog(false), 1500)
+      } else {
+        setAuthMessage(result.detail || 'Login failed')
+      }
+
+    } catch (error) {
+      console.error('Login failed:', error)
+      setAuthMessage('Login failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRegister = async () => {
+    try {
+      setIsLoading(true)
+      setAuthMessage('')
+
+      if (!registerForm.username || !registerForm.email || !registerForm.password) {
+        setAuthMessage('Please fill in all fields')
+        return
+      }
+
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registerForm)
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.status === 'success') {
+        setAuthMessage('Registration successful! You can now login.')
+        // Clear register form
+        setRegisterForm({ username: '', email: '', password: '' })
+      } else {
+        setAuthMessage(result.detail || 'Registration failed')
+      }
+
+    } catch (error) {
+      console.error('Registration failed:', error)
+      setAuthMessage('Registration failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeviceLogin = async () => {
     try {
       setAuthMessage(t('common:auth.preparingLoginMessage'))
 
@@ -132,27 +216,84 @@ export function LoginDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setShowLoginDialog}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t('common:auth.loginToJaaz')}</DialogTitle>
+          <DialogTitle>Login to Jaaz</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            {t('common:auth.loginDescription')}
-          </p>
+        <Tabs defaultValue="username" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="username">Username/Password</TabsTrigger>
+            <TabsTrigger value="device">Device Auth</TabsTrigger>
+          </TabsList>
 
-          <div className="flex gap-2">
-            <Button
-              onClick={handleLogin}
-              disabled={!!authMessage}
-              className="flex-1"
-            >
-              {authMessage || t('common:auth.startLogin')}
-            </Button>
+          <TabsContent value="username" className="space-y-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="Enter username"
+                  value={loginForm.username}
+                  onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter password"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
+                  disabled={isLoading}
+                  onKeyPress={(e) => e.key === 'Enter' && handleUsernameLogin()}
+                />
+              </div>
+              <Button
+                onClick={handleUsernameLogin}
+                disabled={isLoading}
+                className="w-full"
+              >
+                {isLoading ? 'Logging in...' : 'Login'}
+              </Button>
 
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-2">Demo accounts:</p>
+                <p className="text-xs text-muted-foreground">admin/admin123 or demo/demo123</p>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="device" className="space-y-4">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t('common:auth.loginDescription')}
+              </p>
+              <Button
+                onClick={handleDeviceLogin}
+                disabled={!!authMessage}
+                className="w-full"
+              >
+                {authMessage || t('common:auth.startLogin')}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {authMessage && (
+          <div className={`text-sm p-3 rounded-md ${
+            authMessage.includes('successful') || authMessage.includes('✅')
+              ? 'bg-green-50 text-green-700'
+              : authMessage.includes('failed') || authMessage.includes('❌')
+              ? 'bg-red-50 text-red-700'
+              : 'bg-blue-50 text-blue-700'
+          }`}>
+            {authMessage}
           </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   )
