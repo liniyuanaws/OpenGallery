@@ -1,32 +1,41 @@
 from typing import List, Dict, Any, Optional
 from .unified_db_service import unified_db_service
+from .user_aware_db_service import user_aware_db_service
+from .user_context import get_current_user_id
 
 class DatabaseService:
-    """Legacy database service that delegates to unified database service"""
+    """Database service that enforces user isolation"""
 
     def __init__(self):
-        # The unified service handles all initialization
+        # Use the user-aware service for multi-tenant support
+        self.user_aware_service = user_aware_db_service
+        # Keep unified service for backward compatibility
         self.unified_service = unified_db_service
 
     def create_canvas(self, id: str, name: str):
-        """Create a new canvas"""
-        return self.unified_service.create_canvas(id, name)
+        """Create a new canvas for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.create_canvas(id, name, user_id)
 
     def list_canvases(self) -> List[Dict[str, Any]]:
-        """Get all canvases"""
-        return self.unified_service.list_canvases()
+        """Get all canvases for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.list_canvases(user_id)
 
     def create_chat_session(self, id: str, model: str, provider: str, canvas_id: str, title: Optional[str] = None):
-        """Save a new chat session"""
-        return self.unified_service.create_chat_session(id, model, provider, canvas_id, title)
+        """Save a new chat session for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.create_chat_session(id, model, provider, canvas_id, user_id, title)
 
     def create_message(self, session_id: str, role: str, message: str):
-        """Save a chat message"""
-        return self.unified_service.create_message(session_id, role, message)
+        """Save a chat message for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.create_message(session_id, role, message, user_id)
 
     def get_chat_history(self, session_id: str) -> List[Dict[str, Any]]:
-        """Get chat history for a session"""
-        messages_data = self.unified_service.list_messages(session_id)
+        """Get chat history for a session for the current user"""
+        user_id = get_current_user_id()
+        messages_data = self.user_aware_service.list_messages(session_id, user_id)
 
         messages = []
         for row in messages_data:
@@ -41,16 +50,19 @@ class DatabaseService:
         return messages
 
     def list_sessions(self, canvas_id: str) -> List[Dict[str, Any]]:
-        """List all chat sessions"""
-        return self.unified_service.list_chat_sessions(canvas_id)
+        """List all chat sessions for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.list_chat_sessions(canvas_id, user_id)
 
     def save_canvas_data(self, id: str, data: str, thumbnail: str = None):
-        """Save canvas data"""
-        return self.unified_service.save_canvas_data(id, data, thumbnail)
+        """Save canvas data for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.save_canvas_data(id, data, user_id, thumbnail)
 
     def get_canvas_data(self, id: str) -> Optional[Dict[str, Any]]:
-        """Get canvas data"""
-        canvas = self.unified_service.get_canvas(id)
+        """Get canvas data for the current user"""
+        user_id = get_current_user_id()
+        canvas = self.user_aware_service.get_canvas(id, user_id)
         if not canvas:
             return None
 
@@ -64,28 +76,34 @@ class DatabaseService:
         }
 
     def delete_canvas(self, id: str):
-        """Delete canvas and related data"""
-        return self.unified_service.delete_canvas(id)
+        """Delete canvas and related data for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.delete_canvas(id, user_id)
 
     def rename_canvas(self, id: str, name: str):
-        """Rename canvas"""
-        return self.unified_service.rename_canvas(id, name)
+        """Rename canvas for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.rename_canvas(id, name, user_id)
 
     def create_comfy_workflow(self, name: str, api_json: str, description: str, inputs: str, outputs: str = None):
-        """Create a new comfy workflow"""
-        return self.unified_service.create_comfy_workflow(name, api_json, description, inputs, outputs)
+        """Create a new comfy workflow for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.create_comfy_workflow(name, api_json, description, inputs, user_id, outputs)
 
     def list_comfy_workflows(self) -> List[Dict[str, Any]]:
-        """List all comfy workflows"""
-        return self.unified_service.list_comfy_workflows()
+        """List all comfy workflows for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.list_comfy_workflows(user_id)
 
     def delete_comfy_workflow(self, id: int):
-        """Delete a comfy workflow"""
-        return self.unified_service.delete_comfy_workflow(id)
+        """Delete a comfy workflow for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.delete_comfy_workflow(id, user_id)
 
     def create_file(self, file_id: str, file_path: str, width: int = None, height: int = None):
-        """Create a new file record"""
-        return self.unified_service.create_file(file_id, file_path, width, height)
+        """Create a new file record for the current user"""
+        user_id = get_current_user_id()
+        return self.user_aware_service.create_file(file_id, file_path, user_id, width, height)
 
     def get_file(self, file_id: str) -> Optional[Dict[str, Any]]:
         """Get file record by ID"""

@@ -36,9 +36,22 @@ class DynamoDBService:
                 ],
                 attribute_definitions=[
                     {'AttributeName': 'id', 'AttributeType': 'S'},
+                    {'AttributeName': 'user_id', 'AttributeType': 'S'},
                     {'AttributeName': 'updated_at', 'AttributeType': 'S'}
                 ],
                 global_secondary_indexes=[
+                    {
+                        'IndexName': 'user_id-updated_at-index',
+                        'KeySchema': [
+                            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
+                            {'AttributeName': 'updated_at', 'KeyType': 'RANGE'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    },
                     {
                         'IndexName': 'updated_at-index',
                         'KeySchema': [
@@ -61,10 +74,23 @@ class DynamoDBService:
                 ],
                 attribute_definitions=[
                     {'AttributeName': 'id', 'AttributeType': 'S'},
+                    {'AttributeName': 'user_id', 'AttributeType': 'S'},
                     {'AttributeName': 'canvas_id', 'AttributeType': 'S'},
                     {'AttributeName': 'updated_at', 'AttributeType': 'S'}
                 ],
                 global_secondary_indexes=[
+                    {
+                        'IndexName': 'user_id-updated_at-index',
+                        'KeySchema': [
+                            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
+                            {'AttributeName': 'updated_at', 'KeyType': 'RANGE'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    },
                     {
                         'IndexName': 'canvas_id-updated_at-index',
                         'KeySchema': [
@@ -89,7 +115,22 @@ class DynamoDBService:
                 ],
                 attribute_definitions=[
                     {'AttributeName': 'session_id', 'AttributeType': 'S'},
-                    {'AttributeName': 'id', 'AttributeType': 'S'}
+                    {'AttributeName': 'id', 'AttributeType': 'S'},
+                    {'AttributeName': 'user_id', 'AttributeType': 'S'}
+                ],
+                global_secondary_indexes=[
+                    {
+                        'IndexName': 'user_id-session_id-index',
+                        'KeySchema': [
+                            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
+                            {'AttributeName': 'session_id', 'KeyType': 'RANGE'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    }
                 ]
             )
             
@@ -101,9 +142,22 @@ class DynamoDBService:
                 ],
                 attribute_definitions=[
                     {'AttributeName': 'id', 'AttributeType': 'S'},
+                    {'AttributeName': 'user_id', 'AttributeType': 'S'},
                     {'AttributeName': 'updated_at', 'AttributeType': 'S'}
                 ],
                 global_secondary_indexes=[
+                    {
+                        'IndexName': 'user_id-updated_at-index',
+                        'KeySchema': [
+                            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
+                            {'AttributeName': 'updated_at', 'KeyType': 'RANGE'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    },
                     {
                         'IndexName': 'updated_at-index',
                         'KeySchema': [
@@ -126,9 +180,22 @@ class DynamoDBService:
                 ],
                 attribute_definitions=[
                     {'AttributeName': 'id', 'AttributeType': 'S'},
+                    {'AttributeName': 'user_id', 'AttributeType': 'S'},
                     {'AttributeName': 'created_at', 'AttributeType': 'S'}
                 ],
                 global_secondary_indexes=[
+                    {
+                        'IndexName': 'user_id-created_at-index',
+                        'KeySchema': [
+                            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
+                            {'AttributeName': 'created_at', 'KeyType': 'RANGE'}
+                        ],
+                        'Projection': {'ProjectionType': 'ALL'},
+                        'ProvisionedThroughput': {
+                            'ReadCapacityUnits': 5,
+                            'WriteCapacityUnits': 5
+                        }
+                    },
                     {
                         'IndexName': 'created_at-index',
                         'KeySchema': [
@@ -199,7 +266,7 @@ class DynamoDBService:
         return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
     # Canvas operations
-    def create_canvas(self, id: str, name: str):
+    def create_canvas(self, id: str, name: str, user_id: str):
         """Create a new canvas"""
         table = self.dynamodb.Table(self.tables['canvases'])
         timestamp = self._get_current_timestamp()
@@ -207,6 +274,7 @@ class DynamoDBService:
         item = {
             'id': id,
             'name': name,
+            'user_id': user_id,
             'description': '',
             'thumbnail': '',
             'created_at': timestamp,
@@ -215,29 +283,41 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    def list_canvases(self) -> List[Dict[str, Any]]:
-        """Get all canvases"""
+    def list_canvases(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all canvases for a specific user"""
         table = self.dynamodb.Table(self.tables['canvases'])
 
-        response = table.scan()
-        items = response.get('Items', [])
+        response = table.query(
+            IndexName='user_id-updated_at-index',
+            KeyConditionExpression='user_id = :user_id',
+            ExpressionAttributeValues={':user_id': user_id},
+            ScanIndexForward=False  # Sort by updated_at DESC
+        )
 
-        # Sort by updated_at DESC
-        items.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+        return response.get('Items', [])
 
-        return items
-
-    def get_canvas(self, id: str) -> Optional[Dict[str, Any]]:
-        """Get canvas by ID"""
+    def get_canvas(self, id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
+        """Get canvas by ID with optional user verification"""
         table = self.dynamodb.Table(self.tables['canvases'])
 
         response = table.get_item(Key={'id': id})
-        return response.get('Item')
+        canvas = response.get('Item')
 
-    def save_canvas_data(self, id: str, data: str, thumbnail: str = None):
-        """Save canvas data"""
+        # If user_id is provided, verify ownership
+        if canvas and user_id and canvas.get('user_id') != user_id:
+            return None
+
+        return canvas
+
+    def save_canvas_data(self, id: str, data: str, user_id: str, thumbnail: str = None):
+        """Save canvas data with user verification"""
         table = self.dynamodb.Table(self.tables['canvases'])
         timestamp = self._get_current_timestamp()
+
+        # First verify user owns this canvas
+        canvas = self.get_canvas(id, user_id)
+        if not canvas:
+            raise ValueError(f"Canvas {id} not found or access denied for user {user_id}")
 
         update_expression = "SET #data = :data, updated_at = :updated_at"
         expression_attribute_names = {'#data': 'data'}
@@ -257,10 +337,15 @@ class DynamoDBService:
             ExpressionAttributeValues=expression_attribute_values
         )
 
-    def rename_canvas(self, id: str, name: str):
-        """Rename canvas"""
+    def rename_canvas(self, id: str, name: str, user_id: str):
+        """Rename canvas with user verification"""
         table = self.dynamodb.Table(self.tables['canvases'])
         timestamp = self._get_current_timestamp()
+
+        # First verify user owns this canvas
+        canvas = self.get_canvas(id, user_id)
+        if not canvas:
+            raise ValueError(f"Canvas {id} not found or access denied for user {user_id}")
 
         table.update_item(
             Key={'id': id},
@@ -272,22 +357,34 @@ class DynamoDBService:
             }
         )
 
-    def delete_canvas(self, id: str):
-        """Delete canvas"""
+    def delete_canvas(self, id: str, user_id: str):
+        """Delete canvas with user verification"""
         table = self.dynamodb.Table(self.tables['canvases'])
+
+        # First verify user owns this canvas
+        canvas = self.get_canvas(id, user_id)
+        if not canvas:
+            raise ValueError(f"Canvas {id} not found or access denied for user {user_id}")
+
         table.delete_item(Key={'id': id})
 
     # Chat session operations
-    def create_chat_session(self, id: str, model: str, provider: str, canvas_id: str, title: Optional[str] = None):
+    def create_chat_session(self, id: str, model: str, provider: str, canvas_id: str, user_id: str, title: Optional[str] = None):
         """Save a new chat session"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
         timestamp = self._get_current_timestamp()
+
+        # Verify user owns the canvas
+        canvas = self.get_canvas(canvas_id, user_id)
+        if not canvas:
+            raise ValueError(f"Canvas {canvas_id} not found or access denied for user {user_id}")
 
         item = {
             'id': id,
             'model': model,
             'provider': provider,
             'canvas_id': canvas_id,
+            'user_id': user_id,
             'title': title or '',
             'created_at': timestamp,
             'updated_at': timestamp
@@ -295,9 +392,14 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    def list_chat_sessions(self, canvas_id: str) -> List[Dict[str, Any]]:
-        """Get chat sessions for a canvas"""
+    def list_chat_sessions(self, canvas_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Get chat sessions for a canvas with user verification"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
+
+        # Verify user owns the canvas
+        canvas = self.get_canvas(canvas_id, user_id)
+        if not canvas:
+            raise ValueError(f"Canvas {canvas_id} not found or access denied for user {user_id}")
 
         response = table.query(
             IndexName='canvas_id-updated_at-index',
@@ -308,17 +410,41 @@ class DynamoDBService:
 
         return response.get('Items', [])
 
-    def get_chat_session(self, id: str) -> Optional[Dict[str, Any]]:
-        """Get chat session by ID"""
+    def list_user_chat_sessions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all chat sessions for a user"""
+        table = self.dynamodb.Table(self.tables['chat_sessions'])
+
+        response = table.query(
+            IndexName='user_id-updated_at-index',
+            KeyConditionExpression='user_id = :user_id',
+            ExpressionAttributeValues={':user_id': user_id},
+            ScanIndexForward=False  # Sort by updated_at DESC
+        )
+
+        return response.get('Items', [])
+
+    def get_chat_session(self, id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
+        """Get chat session by ID with optional user verification"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
 
         response = table.get_item(Key={'id': id})
-        return response.get('Item')
+        session = response.get('Item')
 
-    def update_chat_session_title(self, id: str, title: str):
-        """Update chat session title"""
+        # If user_id is provided, verify ownership
+        if session and user_id and session.get('user_id') != user_id:
+            return None
+
+        return session
+
+    def update_chat_session_title(self, id: str, title: str, user_id: str):
+        """Update chat session title with user verification"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
         timestamp = self._get_current_timestamp()
+
+        # First verify user owns this session
+        session = self.get_chat_session(id, user_id)
+        if not session:
+            raise ValueError(f"Chat session {id} not found or access denied for user {user_id}")
 
         table.update_item(
             Key={'id': id},
@@ -329,16 +455,28 @@ class DynamoDBService:
             }
         )
 
-    def delete_chat_session(self, id: str):
-        """Delete chat session"""
+    def delete_chat_session(self, id: str, user_id: str):
+        """Delete chat session with user verification"""
         table = self.dynamodb.Table(self.tables['chat_sessions'])
+
+        # First verify user owns this session
+        session = self.get_chat_session(id, user_id)
+        if not session:
+            raise ValueError(f"Chat session {id} not found or access denied for user {user_id}")
+
         table.delete_item(Key={'id': id})
 
     # Chat message operations
-    def create_message(self, session_id: str, role: str, message: str):
-        """Save a chat message"""
+    def create_message(self, session_id: str, role: str, message: str, user_id: str):
+        """Save a chat message with user verification"""
         table = self.dynamodb.Table(self.tables['chat_messages'])
         timestamp = self._get_current_timestamp()
+
+        # Verify user owns the session
+        session = self.get_chat_session(session_id, user_id)
+        if not session:
+            raise ValueError(f"Chat session {session_id} not found or access denied for user {user_id}")
+
         # Use timestamp with microseconds as sort key to maintain order
         # Format: YYYYMMDD_HHMMSS_microseconds
         from datetime import datetime
@@ -348,6 +486,7 @@ class DynamoDBService:
         item = {
             'session_id': session_id,
             'id': message_id,
+            'user_id': user_id,
             'role': role,
             'message': message,
             'created_at': timestamp,
@@ -356,9 +495,14 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    def list_messages(self, session_id: str) -> List[Dict[str, Any]]:
-        """Get messages for a chat session"""
+    def list_messages(self, session_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Get messages for a chat session with user verification"""
         table = self.dynamodb.Table(self.tables['chat_messages'])
+
+        # Verify user owns the session
+        session = self.get_chat_session(session_id, user_id)
+        if not session:
+            raise ValueError(f"Chat session {session_id} not found or access denied for user {user_id}")
 
         response = table.query(
             KeyConditionExpression='session_id = :session_id',
@@ -373,7 +517,7 @@ class DynamoDBService:
         return items
 
     # ComfyUI workflow operations
-    def create_comfy_workflow(self, name: str, api_json: str, description: str, inputs: str, outputs: str = None):
+    def create_comfy_workflow(self, name: str, api_json: str, description: str, inputs: str, user_id: str, outputs: str = None):
         """Create a new comfy workflow"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
         timestamp = self._get_current_timestamp()
@@ -382,6 +526,7 @@ class DynamoDBService:
         item = {
             'id': workflow_id,
             'name': name,
+            'user_id': user_id,
             'api_json': api_json,
             'description': description,
             'inputs': inputs,
@@ -392,32 +537,45 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    def list_comfy_workflows(self) -> List[Dict[str, Any]]:
-        """List all comfy workflows"""
+    def list_comfy_workflows(self, user_id: str) -> List[Dict[str, Any]]:
+        """List comfy workflows for a specific user"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
 
-        response = table.scan()
-        items = response.get('Items', [])
+        response = table.query(
+            IndexName='user_id-updated_at-index',
+            KeyConditionExpression='user_id = :user_id',
+            ExpressionAttributeValues={':user_id': user_id},
+            ScanIndexForward=False  # Sort by updated_at DESC
+        )
 
-        # Sort by updated_at DESC
-        items.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+        return response.get('Items', [])
 
-        return items
-
-    def get_comfy_workflow(self, id: int) -> Optional[Dict[str, Any]]:
-        """Get comfy workflow by ID"""
+    def get_comfy_workflow(self, id: int, user_id: str = None) -> Optional[Dict[str, Any]]:
+        """Get comfy workflow by ID with optional user verification"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
 
         response = table.get_item(Key={'id': str(id)})
-        return response.get('Item')
+        workflow = response.get('Item')
 
-    def delete_comfy_workflow(self, id: int):
-        """Delete a comfy workflow"""
+        # If user_id is provided, verify ownership
+        if workflow and user_id and workflow.get('user_id') != user_id:
+            return None
+
+        return workflow
+
+    def delete_comfy_workflow(self, id: int, user_id: str):
+        """Delete a comfy workflow with user verification"""
         table = self.dynamodb.Table(self.tables['comfy_workflows'])
+
+        # First verify user owns this workflow
+        workflow = self.get_comfy_workflow(id, user_id)
+        if not workflow:
+            raise ValueError(f"Workflow {id} not found or access denied for user {user_id}")
+
         table.delete_item(Key={'id': str(id)})
 
     # File operations
-    def create_file(self, file_id: str, file_path: str, width: int = None, height: int = None):
+    def create_file(self, file_id: str, file_path: str, user_id: str, width: int = None, height: int = None):
         """Create a new file record"""
         table = self.dynamodb.Table(self.tables['files'])
         timestamp = self._get_current_timestamp()
@@ -425,6 +583,7 @@ class DynamoDBService:
         item = {
             'id': file_id,
             'file_path': file_path,
+            'user_id': user_id,
             'created_at': timestamp,
             'updated_at': timestamp
         }
@@ -436,28 +595,41 @@ class DynamoDBService:
 
         table.put_item(Item=item)
 
-    def get_file(self, file_id: str) -> Optional[Dict[str, Any]]:
-        """Get file record by ID"""
+    def get_file(self, file_id: str, user_id: str = None) -> Optional[Dict[str, Any]]:
+        """Get file record by ID with optional user verification"""
         table = self.dynamodb.Table(self.tables['files'])
 
         response = table.get_item(Key={'id': file_id})
-        return response.get('Item')
+        file_record = response.get('Item')
 
-    def list_files(self) -> List[Dict[str, Any]]:
-        """List all files"""
+        # If user_id is provided, verify ownership
+        if file_record and user_id and file_record.get('user_id') != user_id:
+            return None
+
+        return file_record
+
+    def list_files(self, user_id: str) -> List[Dict[str, Any]]:
+        """List files for a specific user"""
         table = self.dynamodb.Table(self.tables['files'])
 
-        response = table.scan()
-        items = response.get('Items', [])
+        response = table.query(
+            IndexName='user_id-created_at-index',
+            KeyConditionExpression='user_id = :user_id',
+            ExpressionAttributeValues={':user_id': user_id},
+            ScanIndexForward=False  # Sort by created_at DESC
+        )
 
-        # Sort by created_at DESC
-        items.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return response.get('Items', [])
 
-        return items
-
-    def delete_file(self, file_id: str):
-        """Delete a file record"""
+    def delete_file(self, file_id: str, user_id: str):
+        """Delete a file record with user verification"""
         table = self.dynamodb.Table(self.tables['files'])
+
+        # First verify user owns this file
+        file_record = self.get_file(file_id, user_id)
+        if not file_record:
+            raise ValueError(f"File {file_id} not found or access denied for user {user_id}")
+
         table.delete_item(Key={'id': file_id})
 
     # Database version operations
