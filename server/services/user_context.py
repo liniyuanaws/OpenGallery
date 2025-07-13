@@ -73,26 +73,39 @@ def extract_user_from_request(request: Request) -> Optional[Dict[str, Any]]:
 def decode_jwt_token(token: str) -> Optional[Dict[str, Any]]:
     """Decode JWT token to extract user information"""
     try:
-        # For now, we'll implement a simple token decoder
-        # In production, you should verify the token signature
-        # and check expiration, issuer, etc.
-        
-        # This is a placeholder implementation
-        # You should replace this with proper JWT verification
-        decoded = jwt.decode(token, options={"verify_signature": False})
-        
+        # Handle development mode token
+        if token == 'dev_token':
+            return {
+                'id': 'dev_user',
+                'username': 'Development User',
+                'email': 'dev_user@example.com',
+                'provider': 'development'
+            }
+
+        # Use proper JWT verification with the same secret and algorithm as user_service
+        from services.user_service import JWT_SECRET, JWT_ALGORITHM
+
+        try:
+            decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        except jwt.ExpiredSignatureError:
+            print("JWT token has expired")
+            return None
+        except jwt.InvalidTokenError:
+            print("Invalid JWT token")
+            return None
+
         # Extract user information from token
         user_info = {
             'id': decoded.get('sub') or decoded.get('user_id'),
             'username': decoded.get('username'),
             'email': decoded.get('email'),
-            'provider': decoded.get('provider'),
+            'provider': decoded.get('provider', 'jaaz'),
         }
-        
+
         # Ensure we have a user ID
         if not user_info['id']:
             return None
-            
+
         return user_info
     except Exception as e:
         print(f"Error decoding JWT token: {e}")

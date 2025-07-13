@@ -244,15 +244,15 @@ async def create_workflow(request: CreateWorkflowRequest):
         api_json = json.dumps(request.api_json)
         inputs = json.dumps(request.inputs)
         outputs = json.dumps(request.outputs)
-        await db_service.create_comfy_workflow(request.name, api_json, request.description, inputs, outputs)
+        db_service.create_comfy_workflow(request.name, api_json, request.description, inputs, outputs)
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to create workflow: {str(e)}")
 
 @router.get("/comfyui/list_workflows")
 async def list_workflows():
-    return await db_service.list_comfy_workflows()
+    return db_service.list_comfy_workflows()
 
 @router.delete("/comfyui/delete_workflow")
 async def delete_workflow(id: int):
-    return await db_service.delete_comfy_workflow(id)
+    return db_service.delete_comfy_workflow(id)

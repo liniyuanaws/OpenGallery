@@ -7,6 +7,7 @@ import { Textarea } from '../ui/textarea'
 import { DialogContent, DialogHeader, DialogTitle, Dialog } from '../ui/dialog'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
+import { authenticatedFetch } from '@/api/auth'
 
 export type ComfyWorkflowInput = {
   name: string
@@ -31,7 +32,7 @@ export default function ComfuiWorkflowSetting() {
   const [showAddWorkflowDialog, setShowAddWorkflowDialog] = useState(false)
   const [workflows, setWorkflows] = useState<ComfyWorkflow[]>([])
   useEffect(() => {
-    fetch('/api/settings/comfyui/list_workflows')
+    authenticatedFetch('/api/settings/comfyui/list_workflows')
       .then((res) => res.json())
       .then((data) => {
         console.log('ComfyUI workflows:', data)
@@ -170,11 +171,8 @@ function AddWorkflowDialog({ onClose }: { onClose: () => void }) {
       setError('Please enter a workflow name')
       return
     }
-    fetch('/api/settings/comfyui/create_workflow', {
+    authenticatedFetch('/api/settings/comfyui/create_workflow', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         name: workflowName,
         api_json: workflowJson,
