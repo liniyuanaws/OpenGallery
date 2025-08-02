@@ -113,7 +113,19 @@ class WorkflowExecution:
             try:
                 response = await client.post(f"http://{self.host}:{self.port}/prompt", json=data)
                 body = response.json()
+                print(f"🔍 ComfyUI response: {body}")  # Debug: print the actual response
                 self.prompt_id = body["prompt_id"]
+            except KeyError as e:
+                print(f"❌ Missing key in ComfyUI response: {e}")
+                print(f"🔍 Full response body: {body}")
+                message = f"ComfyUI response missing expected field: {e}. Response: {body}"
+                self.progress.stop()
+                pprint(f"[bold red]Error running workflow\n{message}[/bold red]")
+                await send_to_websocket(self.ctx.get('session_id'), {
+                    'type': 'error',
+                    'error': message
+                })
+                raise Exception(message)
             except httpx.HTTPStatusError as e:
                 message = "An unknown error occurred"
                 if e.response.status_code == 500:
@@ -164,6 +176,11 @@ class WorkflowExecution:
 
     def format_image_path(self, img):
         query = urllib.parse.urlencode(img)
+        return f"http://{self.host}:{self.port}/view?{query}"
+
+    def format_video_path(self, video):
+        """Format video file path for ComfyUI output"""
+        query = urllib.parse.urlencode(video)
         return f"http://{self.host}:{self.port}/view?{query}"
 
     async def on_message(self, message):
@@ -242,11 +259,25 @@ class WorkflowExecution:
 
         output = data["output"]
 
-        if output is None or "images" not in output:
+        if output is None:
             return
 
-        for img in output["images"]:
-            self.outputs.append(self.format_image_path(img))
+        # Handle image outputs
+        if "images" in output:
+            for img in output["images"]:
+                self.outputs.append(self.format_image_path(img))
+
+        # Handle video outputs (for video generation workflows)
+        if "gifs" in output:
+            for video in output["gifs"]:
+                self.outputs.append(self.format_video_path(video))
+
+        # Handle other video formats that might be in different output keys
+        for key in output:
+            if key.startswith("video") or key in ["mp4", "webm", "mov"]:
+                for video_file in output[key]:
+                    self.outputs.append(self.format_video_path(video_file))
+
         await send_to_websocket(self.ctx.get('session_id'), {
             'type': 'tool_call_progress',
             'tool_call_id': self.ctx.get('tool_call_id'),

@@ -59,12 +59,22 @@ export class SocketIOManager {
         timeout: 30000,               // 连接超时30秒
         forceNew: true,               // 强制创建新连接
         auth: authData,               // 添加身份验证数据
+        // 添加心跳机制防止连接超时
+        pingInterval: 25000,          // 25秒发送一次ping
+        pingTimeout: 60000,           // 60秒没有pong就认为断开
       })
 
       this.socket.on('connect', () => {
         console.log('✅ Socket.IO connected:', this.socket?.id)
         this.connected = true
         this.reconnectAttempts = 0
+
+        // WebSocket连接成功，停止HTTP轮询
+        if (this.pollingEnabled) {
+          console.log('🛑 WebSocket connected, stopping HTTP polling')
+          this.stopPolling()
+        }
+
         resolve(true)
       })
 
@@ -87,6 +97,21 @@ export class SocketIOManager {
       this.socket.on('disconnect', (reason: any) => {
         console.log('🔌 Socket.IO disconnected:', reason)
         this.connected = false
+
+        // 如果是由于网络问题断开，尝试重连
+        if (reason === 'io server disconnect') {
+          // 服务器主动断开，可能是维护或重启
+          console.log('🔄 Server disconnected, will attempt to reconnect')
+        } else if (reason === 'ping timeout' || reason === 'transport close') {
+          // 网络问题，立即尝试重连
+          console.log('🔄 Network issue detected, attempting immediate reconnect')
+          setTimeout(() => {
+            if (!this.connected) {
+              this.socket?.connect()
+            }
+          }, 1000)
+        }
+
         // 如果WebSocket断开，启动轮询
         if (this.activeSessions.size > 0) {
           console.log('🔄 WebSocket disconnected, starting HTTP polling fallback')
@@ -101,10 +126,19 @@ export class SocketIOManager {
   private registerEventHandlers() {
     if (!this.socket) return
 
+    // 先移除所有现有的事件监听器，避免重复注册
+    this.socket.removeAllListeners('connected')
+    this.socket.removeAllListeners('init_done')
+    this.socket.removeAllListeners('session_update')
+    this.socket.removeAllListeners('pong')
+
     this.socket.on('connected', (data: any) => {
       console.log('🔗 Socket.IO connection confirmed:', data)
-      // WebSocket连接成功，但保持轮询作为备用机制
-      console.log('🔄 Keeping HTTP polling as backup mechanism')
+      // WebSocket连接成功，停止HTTP轮询
+      if (this.pollingEnabled) {
+        console.log('🛑 WebSocket connected, stopping HTTP polling')
+        this.stopPolling()
+      }
     })
 
     this.socket.on('init_done', (data: any) => {
@@ -196,8 +230,17 @@ export class SocketIOManager {
     this.activeSessions.add(sessionId)
     console.log(`📝 Added active session: ${sessionId}`)
 
-    // 总是启动轮询作为备用机制（即使WebSocket连接正常）
-    if (!this.pollingEnabled) {
+    // 只有在WebSocket连接失败时才启动轮询作为备用机制
+    if (!this.connected && !this.pollingEnabled) {
+      console.log('🔄 WebSocket not connected, starting HTTP polling as fallback')
+      this.startPolling()
+    }
+  }
+
+  // 强制启动轮询（用于确保正在处理的会话能被监控）
+  forceStartPolling() {
+    if (!this.pollingEnabled && this.activeSessions.size > 0) {
+      console.log('🔄 Force starting HTTP polling for active sessions')
       this.startPolling()
     }
   }
@@ -239,6 +282,13 @@ export class SocketIOManager {
   }
 
   private async pollForUpdates() {
+    // 如果WebSocket已连接，不执行轮询
+    if (this.connected) {
+      console.log('🔗 WebSocket is connected, skipping polling')
+      this.stopPolling()
+      return
+    }
+
     if (this.activeSessions.size === 0) {
       return
     }
@@ -270,22 +320,30 @@ export class SocketIOManager {
 
       const data = await response.json()
 
+      // 总是发送消息更新事件，让前端能看到最新状态
+      console.log(`📊 HTTP Polling update for session ${sessionId}, processing: ${data.is_processing}, messages: ${data.messages?.length || 0}`)
+
       // 发送消息更新事件
-      eventBus.emit('Socket::Session::AllMessages', {
+      const eventData = {
         session_id: sessionId,
         type: ISocket.SessionEventType.AllMessages,
         messages: data.messages
-      })
+      }
+      console.log(`📊 Emitting AllMessages event:`, eventData)
+      eventBus.emit('Socket::Session::AllMessages', eventData)
 
-      // 如果处理完成，发送完成事件
+      // 如果处理完成，发送完成事件并移除活跃会话
       if (!data.is_processing) {
+        console.log(`📊 HTTP Polling detected completion for session ${sessionId}`)
+
+        // 发送完成事件
         eventBus.emit('Socket::Session::Done', {
           session_id: sessionId,
           type: ISocket.SessionEventType.Done
         })
 
-        // 如果会话处理完成，可以从活跃会话中移除
-        // this.removeActiveSession(sessionId)
+        // 会话处理完成，从活跃会话中移除
+        this.removeActiveSession(sessionId)
       }
 
     } catch (error) {
@@ -296,6 +354,11 @@ export class SocketIOManager {
   // 检查是否正在使用轮询
   isPolling(): boolean {
     return this.pollingEnabled
+  }
+
+  // 检查WebSocket是否已连接
+  isConnected(): boolean {
+    return this.connected
   }
 }
 
@@ -319,4 +382,5 @@ const getServerUrl = () => {
 
 export const socketManager = new SocketIOManager({
   serverUrl: getServerUrl(),
+  autoConnect: false,  // 禁用自动连接，由 SocketProvider 控制连接
 })

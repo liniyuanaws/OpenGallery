@@ -52,7 +52,7 @@ def create_default_model():
 
 
 @tool
-def planner_agent(task: str = Field(..., description="The task or project that needs planning")) -> str:
+async def planner_agent(task: str = Field(..., description="The task or project that needs planning")) -> str:
     """
     Specialized planning agent that creates detailed execution plans.
 
@@ -93,20 +93,28 @@ Consider what specialists might be needed for each step and provide actionable g
 
         print("🔍 DEBUG: Calling planner agent with streaming...")
 
-        # 使用同步调用替代流式调用
+        # 使用异步流式调用替代同步调用
         try:
-            print("🔍 DEBUG: Calling planner with synchronous call...")
-            response = planner(formatted_task)
+            print("🔍 DEBUG: Calling planner with async streaming...")
+            response_parts = []
+            async for event in planner.stream_async(formatted_task):
+                # 收集响应内容
+                if isinstance(event, dict):
+                    if 'data' in event and isinstance(event['data'], str):
+                        response_parts.append(event['data'])
+                    elif 'event' in event and 'contentBlockDelta' in event['event']:
+                        delta = event['event']['contentBlockDelta']['delta']
+                        if 'text' in delta:
+                            response_parts.append(delta['text'])
+                elif isinstance(event, str):
+                    response_parts.append(event)
+                elif hasattr(event, 'content'):
+                    response_parts.append(event.content)
 
-            if hasattr(response, 'content'):
-                response_text = response.content
-            elif isinstance(response, str):
-                response_text = response
-            else:
-                response_text = str(response)
+            response_text = ''.join(response_parts)
 
         except Exception as e:
-            print(f"🔍 DEBUG: Planner synchronous call error: {e}")
+            print(f"🔍 DEBUG: Planner async streaming error: {e}")
             print(f"🔍 DEBUG: Planner error traceback: {traceback.format_exc()}")
             response_text = f"❌ Planning Error: {str(e)}"
 
@@ -126,6 +134,6 @@ def get_specialized_agents():
     """返回所有专门化agent工具的列表"""
     return [
         planner_agent,
-        image_designer_agent
+        # image_designer_agent 已移除 - 主Agent直接使用generate_image_with_context
         # coordinator_agent 已移除 - 主Agent直接承担协调职责
     ]

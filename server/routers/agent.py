@@ -76,7 +76,8 @@ async def get_models():
                 'provider': provider,
                 'model': model_name,
                 'url': config[provider].get('url', ''),
-                'type': model.get('type', 'text')
+                'type': model.get('type', 'text'),
+                'media_type': model.get('media_type')
             })
     return res
 
@@ -98,6 +99,8 @@ async def get_chat_session(session_id: str):
     """Get chat history and last image info for the authenticated user"""
     try:
         messages = db_service.get_chat_history(session_id)
+        print(f"🔍 DEBUG: API returning {len(messages)} messages for session {session_id}")
+        print(f"🔍 DEBUG: Messages content: {messages}")
 
         # 获取最后一幅图像
         last_image_id = ""
@@ -109,10 +112,12 @@ async def get_chat_session(session_id: str):
         except Exception as e:
             print(f"❌ Error getting last image for session {session_id}: {e}")
 
-        return {
+        result = {
             "messages": messages,
             "last_image_id": last_image_id
         }
+        print(f"🔍 DEBUG: Final API response: {result}")
+        return result
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -122,6 +127,43 @@ async def get_chat_session(session_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get chat session: {str(e)}"
+        )
+
+@router.post("/chat_session/{session_id}/message")
+async def save_message(session_id: str, request: dict):
+    """Save a single message to the chat session for the authenticated user"""
+    try:
+        role = request.get('role', 'assistant')
+        content = request.get('content', '')
+
+        print(f"🔍 DEBUG: Saving message to session {session_id}")
+        print(f"🔍 DEBUG: Role: {role}")
+        print(f"🔍 DEBUG: Content type: {type(content)}")
+        print(f"🔍 DEBUG: Content: {content}")
+
+        # Convert content to string if it's not already
+        if isinstance(content, dict) or isinstance(content, list):
+            import json
+            content = json.dumps(content)
+            print(f"🔍 DEBUG: Converted content to JSON string: {content}")
+
+        db_service.create_message(session_id, role, content)
+        print(f"✅ DEBUG: Message saved successfully to database")
+
+        return {"success": True, "message": "Message saved successfully"}
+    except ValueError as e:
+        print(f"❌ DEBUG: ValueError saving message: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    except Exception as e:
+        print(f"❌ Error saving message: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save message"
         )
 
 @router.get("/chat_session/{session_id}/status")

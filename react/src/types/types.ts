@@ -87,4 +87,6 @@ export type Model = {
   provider: string
   model: string
   url: string
+  type?: string
+  media_type?: string
 }

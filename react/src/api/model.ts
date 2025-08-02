@@ -6,6 +6,7 @@ export async function listModels(): Promise<
     model: string
     type: string
     url: string
+    media_type?: string
   }[]
 > {
   const response = await authenticatedFetch('/api/list_models')

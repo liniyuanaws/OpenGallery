@@ -45,6 +45,8 @@ export interface SessionFileGeneratedEvent extends SessionBaseEvent {
   height: number
   tool_call_id: string
   canvas_id?: string
+  duration?: number  // 视频时长（秒）
+  file_type?: string // 文件类型（'image' 或 'video'）
 }
 export interface SessionDeltaEvent extends SessionBaseEvent {
   type: SessionEventType.Delta

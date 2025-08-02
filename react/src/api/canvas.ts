@@ -32,6 +32,11 @@ export async function createCanvas(data: {
     model: string
     url: string
   }
+  video_model?: {
+    provider: string
+    model: string
+    url: string
+  }
   system_prompt: string
 }): Promise<{ id: string }> {
   const response = await authenticatedFetch('/api/canvas/create', {

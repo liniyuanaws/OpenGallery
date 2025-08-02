@@ -22,6 +22,9 @@ from services.websocket_service import send_to_websocket, send_to_user_websocket
 from services.strands_context import SessionContextManager
 from services.user_context import get_current_user_id
 
+# 全局变量来跟踪已发送的事件，防止重复
+_sent_events = set()
+
 
 async def send_user_websocket_message(session_id: str, event: dict):
     """Send WebSocket message to the current user"""
@@ -32,6 +35,64 @@ async def send_user_websocket_message(session_id: str, event: dict):
         # Fallback to broadcast if user context is not available
         print(f"⚠️ User context not available, falling back to broadcast: {e}")
         await send_to_websocket(session_id, event)
+
+
+async def handle_image_generation_result(tool_result_text: str, session_id: str, tool_call_id: str):
+    """处理图像生成工具的结果，如果检测到图像生成成功，则保存图像消息"""
+    try:
+        print(f"🔍 DEBUG: Checking tool result text: {tool_result_text[:200]}...")
+
+        # 检查是否是图像生成成功的消息
+        if "Image generated successfully!" in tool_result_text and "File ID:" in tool_result_text:
+            print(f"🎨 DEBUG: Found image generation success message")
+
+            # 提取文件ID
+            import re
+            file_id_match = re.search(r'File ID: ([^,\s]+)', tool_result_text)
+            print(f"🔍 DEBUG: Regex match result: {file_id_match}")
+
+            if file_id_match:
+                file_id = file_id_match.group(1)
+                print(f"🎨 DEBUG: Detected image generation result, file_id: {file_id}")
+
+                # 创建图像消息格式
+                image_message = {
+                    'role': 'assistant',
+                    'content': [
+                        {
+                            'type': 'image_url',
+                            'image_url': {
+                                'url': f'/api/file/{file_id}'
+                            }
+                        }
+                    ]
+                }
+
+                # 保存图像消息到数据库
+                try:
+                    db_service.create_message(session_id, 'assistant', json.dumps(image_message))
+                    print(f"✅ Saved image message for file_id: {file_id}")
+                except Exception as save_error:
+                    print(f"❌ ERROR: Failed to save image message: {save_error}")
+                    traceback.print_exc()
+            else:
+                print(f"❌ DEBUG: Failed to extract file_id from: {tool_result_text}")
+        # 检查是否是视频生成成功的消息
+        elif "Video generated successfully!" in tool_result_text and "File ID:" in tool_result_text:
+            # 提取文件ID
+            import re
+            file_id_match = re.search(r'File ID: `([^`]+)`', tool_result_text)
+            if file_id_match:
+                file_id = file_id_match.group(1)
+                print(f"🎬 DEBUG: Detected video generation result, file_id: {file_id}")
+
+                # 对于视频，我们保存包含下载链接的文本消息（因为前端还没有专门的视频消息组件）
+                # 这里我们不需要额外保存，因为工具返回的文本消息已经包含了下载链接
+                print(f"✅ Video message will be saved as text with download link")
+
+    except Exception as e:
+        print(f"⚠️ Error handling generation result: {e}")
+        # 不抛出异常，避免影响主流程
 
 
 def create_model_instance(text_model: Dict[str, Any]):
@@ -97,29 +158,58 @@ def get_specialized_agents():
         return []
 
 
-async def strands_agent(messages, canvas_id, session_id, text_model, image_model, system_prompt: str = None):
+async def strands_agent(messages, canvas_id, session_id, text_model, image_model, video_model=None, system_prompt: str = None):
     """单个 Strands Agent 处理"""
     try:
         model = create_model_instance(text_model)
 
         # 创建系统提示
-        agent_system_prompt = system_prompt or """
-You are a professional AI assistant with image generation capabilities.
+        available_tools = []
+
+        # 检查是否使用 ComfyUI 模型
+        is_comfyui_model = (
+            image_model.get('provider') == 'comfyui' or
+            (video_model and video_model.get('provider') == 'comfyui')
+        )
+
+        print(f"🔍 DEBUG: is_comfyui_model = {is_comfyui_model}")
+        print(f"🔍 DEBUG: image_model.provider = {image_model.get('provider')}")
+        print(f"🔍 DEBUG: video_model = {video_model}")
+        if video_model:
+            print(f"🔍 DEBUG: video_model.provider = {video_model.get('provider')}")
+
+        if is_comfyui_model:
+            available_tools.append("generate_with_comfyui: Smart ComfyUI generator that automatically creates images or videos based on the selected model")
+        else:
+            available_tools.append("generate_image_with_context: Generate images based on text descriptions")
+            if video_model:
+                available_tools.append("generate_video_with_context: Generate videos based on text descriptions and optionally input images")
+
+        tools_description = "\n".join([f"- {tool}" for tool in available_tools])
+
+        agent_system_prompt = system_prompt or f"""
+You are a professional AI assistant with image and video generation capabilities.
 
 Available tools:
-- generate_image_with_context: Generate images based on text descriptions
+{tools_description}
 
-When users request image generation:
+When users request image or video generation:
 1. Analyze their request to understand what they want
-2. Create a detailed, descriptive prompt for the image
-3. Use the generate_image_with_context tool to create the image
+2. Create a detailed, descriptive prompt for the content
+3. Use the appropriate generation tool:
+   - For ComfyUI models: Use generate_with_comfyui (automatically detects image/video based on model)
+   - For other providers: Use generate_image_with_context or generate_video_with_context
 4. Choose appropriate aspect ratios based on the content
+5. The tools support both text-to-image/video and image-to-image/video modes
+6. For I2I/I2V, you can specify an input_image or use use_previous_image=True
 
-IMPORTANT - Image Context Usage:
-- The tool has use_previous_image=True by default, which automatically uses the most recent image from this conversation
-- Use use_previous_image=TRUE when the user wants to EDIT, MODIFY, or BUILD UPON an existing image (e.g., "change the dress color", "add a hat", "remove the background")
-- Use use_previous_image=FALSE when the user wants a COMPLETELY NEW, UNRELATED image or explicitly asks for a "new image"
-- If no previous image exists in the conversation, the tool will inform you appropriately
+IMPORTANT - Context Usage:
+- Image tool has use_previous_image=True by default, which automatically uses the most recent image from this conversation
+- Video tool has use_previous_image=True by default, which automatically uses the most recent image for I2V generation
+- Use use_previous_image=TRUE when the user wants to EDIT, MODIFY, or BUILD UPON an existing image/video
+- Use use_previous_image=FALSE when the user wants a COMPLETELY NEW, UNRELATED content or explicitly asks for a "new" creation
+- IMPORTANT: Some models (like flux-t2i, wan-t2v) are text-only models and don't support input images. The tools will automatically ignore use_previous_image for these models
+- If no previous image exists in the conversation, the tools will inform you appropriately
 
 For other tasks, use your general knowledge and reasoning capabilities.
 Be helpful, accurate, and creative in your responses.
@@ -141,19 +231,37 @@ Be helpful, accurate, and creative in your responses.
         except Exception:
             current_user_id = None
 
-        with SessionContextManager(session_id, canvas_id, {'image': image_model}, user_id=current_user_id):
+        # 准备模型上下文
+        model_context = {'image': image_model}
+        if video_model:
+            model_context['video'] = video_model
+
+        with SessionContextManager(session_id, canvas_id, model_context, user_id=current_user_id):
             print(f"💬 Processing: {user_prompt[:50]}...")
 
-            # 验证上下文是否正确设置
-            from services.strands_context import get_image_model
-            context_image_model = get_image_model()
+            # 创建带有上下文信息的工具
+            tools = []
 
-            # 创建带有上下文信息的图像生成工具
-            from tools.strands_image_generators import create_generate_image_with_context
-            contextual_generate_image = create_generate_image_with_context(session_id, canvas_id, image_model, current_user_id)
+            # 检查是否使用 ComfyUI 模型
+            if is_comfyui_model:
+                # 使用智能 ComfyUI 工具
+                from tools.strands_comfyui_generator import create_smart_comfyui_generator
+                # 优先使用用户明确选择的视频模型，如果没有则使用图像模型
+                comfyui_model = video_model if (video_model and video_model.get('provider') == 'comfyui') else image_model
+                print(f"🔍 DEBUG: Selected ComfyUI model: {comfyui_model}")
+                smart_comfyui_tool = create_smart_comfyui_generator(session_id, canvas_id, comfyui_model, current_user_id)
+                tools.append(smart_comfyui_tool)
+            else:
+                # 使用传统的分离工具
+                from tools.strands_image_generators import create_generate_image_with_context
+                contextual_generate_image = create_generate_image_with_context(session_id, canvas_id, image_model, current_user_id)
+                tools.append(contextual_generate_image)
 
-            # 只使用带上下文的generate_image工具
-            tools = [contextual_generate_image]
+                # 添加视频生成工具（如果配置了视频模型）
+                if video_model:
+                    from tools.strands_video_generators import create_generate_video_with_context
+                    contextual_generate_video = create_generate_video_with_context(session_id, canvas_id, video_model, current_user_id)
+                    tools.append(contextual_generate_video)
 
             print(f"🔍 DEBUG: Using tools: {[tool.__name__ for tool in tools]}")
 
@@ -166,36 +274,44 @@ Be helpful, accurate, and creative in your responses.
 
             print(f"✅ Agent created with {len(tools)} tools")
 
-            # 使用同步调用替代流式处理
-            print("🔍 DEBUG: Calling agent with synchronous call...")
+            # 使用异步流式调用替代同步调用
+            print("🔍 DEBUG: Calling agent with async streaming...")
 
             try:
-                # 使用同步调用
-                response = agent(user_prompt)
+                # 使用异步流式调用
+                response_parts = []
+                tool_results = []  # 收集工具调用结果
+                async for event in agent.stream_async(user_prompt):
+                    # 处理流式事件并发送到前端
+                    await handle_agent_event(event, session_id)
 
-                # 处理同步响应
-                if hasattr(response, 'content'):
-                    response_text = response.content
-                elif isinstance(response, str):
-                    response_text = response
-                else:
-                    response_text = str(response)
+                    # 收集响应内容用于保存到数据库
+                    if isinstance(event, dict) and 'event' in event and 'contentBlockDelta' in event['event']:
+                        delta = event['event']['contentBlockDelta']['delta']
+                        if 'text' in delta:
+                            response_parts.append(delta['text'])
 
+                    # 收集工具调用结果
+                    elif isinstance(event, dict) and 'toolResult' in event:
+                        tool_result = event['toolResult']
+                        if 'content' in tool_result:
+                            for content in tool_result['content']:
+                                if content.get('type') == 'text' and 'text' in content:
+                                    tool_results.append(content['text'])
+                                    print(f"🔍 DEBUG: Collected tool result: {content['text'][:100]}...")
 
+                                    # 工具已经直接保存了图像/视频消息，这里不需要额外处理
 
-                # 发送 delta 事件到 WebSocket
-                await send_user_websocket_message(session_id, {
-                    'type': 'delta',
-                    'text': response_text
-                })
-
-                # 同时保存完整的文本消息到数据库
+                # 保存完整的文本消息到数据库（包括工具结果）
+                all_content = response_parts + tool_results
+                response_text = ''.join(all_content)
                 if response_text.strip():  # 只保存非空消息
                     text_message = {
                         'role': 'assistant',
                         'content': response_text
                     }
                     db_service.create_message(session_id, 'assistant', json.dumps(text_message))
+                    print(f"🔍 DEBUG: Saved message with {len(response_parts)} text parts and {len(tool_results)} tool results")
 
             except Exception as e:
                 print(f"❌ Agent error: {e}")
@@ -218,7 +334,7 @@ Be helpful, accurate, and creative in your responses.
         })
 
 
-async def strands_multi_agent(messages, canvas_id, session_id, text_model, image_model, system_prompt: str = None):
+async def strands_multi_agent(messages, canvas_id, session_id, text_model, image_model, video_model=None, system_prompt: str = None):
     """多Agent Swarm处理"""
     try:
         model = create_model_instance(text_model)
@@ -281,31 +397,54 @@ For analysis, research, or data processing tasks, use your own reasoning capabil
         except Exception:
             current_user_id = None
 
-        with SessionContextManager(session_id, canvas_id, {'image': image_model}, user_id=current_user_id):
+        # 准备模型上下文
+        model_context = {'image': image_model}
+        if video_model:
+            model_context['video'] = video_model
+
+        with SessionContextManager(session_id, canvas_id, model_context, user_id=current_user_id):
             print(f"🔍 DEBUG: Starting multi-agent stream call with prompt: {user_prompt}")
             print(f"🔍 DEBUG: Session context - session_id: {session_id}, canvas_id: {canvas_id}")
             print(f"🔍 DEBUG: Image model: {image_model}")
 
-            # 使用同步调用替代流式处理
-            print("🔍 DEBUG: Calling multi-agent with synchronous call...")
+            # 使用异步流式调用替代同步调用
+            print("🔍 DEBUG: Calling multi-agent with async streaming...")
 
             try:
-                # 使用同步调用
-                response = agent(user_prompt)
+                # 使用异步流式调用
+                response_parts = []
+                tool_results = []  # 收集工具调用结果
+                async for event in agent.stream_async(user_prompt):
+                    # 处理流式事件并发送到前端
+                    await handle_agent_event(event, session_id)
 
-                # 处理同步响应
-                if hasattr(response, 'content'):
-                    response_text = response.content
-                elif isinstance(response, str):
-                    response_text = response
-                else:
-                    response_text = str(response)
+                    # 收集响应内容用于保存到数据库
+                    if isinstance(event, dict) and 'event' in event and 'contentBlockDelta' in event['event']:
+                        delta = event['event']['contentBlockDelta']['delta']
+                        if 'text' in delta:
+                            response_parts.append(delta['text'])
 
+                    # 收集工具调用结果
+                    elif isinstance(event, dict) and 'toolResult' in event:
+                        tool_result = event['toolResult']
+                        if 'content' in tool_result:
+                            for content in tool_result['content']:
+                                if content.get('type') == 'text' and 'text' in content:
+                                    tool_results.append(content['text'])
+                                    print(f"🔍 DEBUG: Multi-agent collected tool result: {content['text'][:100]}...")
 
-                await send_user_websocket_message(session_id, {
-                    'type': 'delta',
-                    'text': response_text
-                })
+                                    # 工具已经直接保存了图像/视频消息，这里不需要额外处理
+
+                # 保存完整的文本消息到数据库（包括工具结果）
+                all_content = response_parts + tool_results
+                response_text = ''.join(all_content)
+                if response_text.strip():  # 只保存非空消息
+                    text_message = {
+                        'role': 'assistant',
+                        'content': response_text
+                    }
+                    db_service.create_message(session_id, 'assistant', json.dumps(text_message))
+                    print(f"🔍 DEBUG: Multi-agent saved message with {len(response_parts)} text parts and {len(tool_results)} tool results")
 
             except Exception as e:
                 print(f"❌ Multi-agent error: {e}")
@@ -344,10 +483,19 @@ async def handle_agent_event(event, session_id):
             start = inner_event['contentBlockStart']['start']
             if 'toolUse' in start:
                 tool_use = start['toolUse']
-                print(f"🔧 Tool call started: {tool_use.get('name', '')}")
+                tool_call_id = tool_use.get('toolUseId', '')
+
+                # 检查是否已经发送过这个tool_call事件
+                event_key = f"tool_call_{session_id}_{tool_call_id}"
+                if event_key in _sent_events:
+                    print(f"🔄 Skipping duplicate tool_call event: {tool_call_id}")
+                    return
+
+                _sent_events.add(event_key)
+                print(f"🔧 Tool call started: {tool_use.get('name', '')} (ID: {tool_call_id})")
                 await send_user_websocket_message(session_id, {
                     'type': 'tool_call',
-                    'id': tool_use.get('toolUseId', ''),
+                    'id': tool_call_id,
                     'name': tool_use.get('name', ''),
                     'arguments': ''
                 })
@@ -372,16 +520,31 @@ async def handle_agent_event(event, session_id):
             stop_info = inner_event['contentBlockStop']
             if 'toolUse' in stop_info:
                 print(f"🔧 Tool call completed")
+
+    # 处理工具调用结果
+    elif 'toolResult' in event:
+        tool_result = event['toolResult']
+        print(f"🔧 Tool result received: {tool_result.get('toolUseId', 'unknown')}")
+
+        # 发送工具结果到前端（如果需要）
+        if 'content' in tool_result:
+            for content in tool_result['content']:
+                if content.get('type') == 'text' and 'text' in content:
+                    # 可以选择发送工具结果作为delta事件
+                    await send_user_websocket_message(session_id, {
+                        'type': 'delta',
+                        'text': content['text']
+                    })
     
-    # 处理简单的文本数据事件
-    elif "data" in event and "delta" in event:
-        # 只处理纯文本数据，避免重复处理
-        if "event_loop_metrics" in event:
-            # 这是一个包含文本的数据事件
-            await send_user_websocket_message(session_id, {
-                'type': 'delta',
-                'text': event["data"]
-            })
+    # 注释掉重复的文本处理逻辑，避免重复发送delta事件
+    # elif "data" in event and "delta" in event:
+    #     # 处理包含文本的数据事件，但避免重复处理已经在上面处理过的事件
+    #     if isinstance(event.get("data"), str) and event["data"].strip():
+    #         # 这是一个包含文本的数据事件
+    #         await send_user_websocket_message(session_id, {
+    #             'type': 'delta',
+    #             'text': event["data"]
+    #         })
 
 
 # 向后兼容的别名

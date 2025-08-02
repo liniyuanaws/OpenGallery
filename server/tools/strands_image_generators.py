@@ -8,6 +8,9 @@ Strands格式的图像生成工具
 # 这可以防止 "tool function missing" 警告
 __STRANDS_TOOL__ = False
 __all__ = ['create_generate_image_with_context', 'generate_file_id', 'generate_image_id', 'strands_image_generators']
+
+# 全局变量来跟踪已发送的file_generated事件，防止重复
+_sent_file_events = set()
 import random
 import base64
 import json
@@ -33,30 +36,7 @@ from services.config_service import FILES_DIR
 from services.db_service import db_service
 from services.websocket_service import send_to_websocket, broadcast_session_update
 
-# 辅助函数：安全地执行异步操作
-def run_async_safe(coro, timeout=10):
-    """安全地运行异步操作，自动处理事件循环"""
-    try:
-        # 尝试获取当前事件循环
-        loop = asyncio.get_running_loop()
-        # 如果有运行中的事件循环，创建任务
-        import concurrent.futures
-
-        def run_in_thread():
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            try:
-                return new_loop.run_until_complete(coro)
-            finally:
-                new_loop.close()
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(run_in_thread)
-            return future.result(timeout=timeout)
-
-    except RuntimeError:
-        # 没有运行中的事件循环，可以直接使用 asyncio.run
-        return asyncio.run(coro)
+# run_async_safe 函数已移除 - 现在直接使用 async/await
 
 # Import all generators with absolute imports
 try:
@@ -144,19 +124,56 @@ def get_most_recent_image_from_session(session_id: str, user_id: str = None) -> 
 
         # 从最新的消息开始查找图像消息
         for i, message in enumerate(reversed(messages)):
+            # 确保message是字典类型
+            if not isinstance(message, dict):
+                continue
             # 查找助手生成的图像和用户上传的图像
             if message.get('content'):
                 content = message.get('content', [])
 
-                # 处理字符串格式的content（可能包含图像引用）
+                # 处理字符串格式的content（可能是JSON字符串或包含图像引用的文本）
                 if isinstance(content, str):
+                    # 首先尝试解析为JSON
+                    try:
+                        import json
+                        parsed_content = json.loads(content)
+                        if isinstance(parsed_content, list):
+                            # 递归处理解析后的列表
+                            for item in parsed_content:
+                                if (isinstance(item, dict) and
+                                    item.get('type') == 'image_url' and
+                                    item.get('image_url', {}).get('url')):
+
+                                    url = item['image_url']['url']
+                                    if '/api/file/' in url:
+                                        file_id = url.split('/api/file/')[-1]
+                                        print(f"🎯 Found recent image in session (from JSON): {file_id}")
+                                        return file_id
+                        elif isinstance(parsed_content, dict) and parsed_content.get('content'):
+                            # 处理嵌套的content结构
+                            nested_content = parsed_content['content']
+                            if isinstance(nested_content, list):
+                                for item in nested_content:
+                                    if (isinstance(item, dict) and
+                                        item.get('type') == 'image_url' and
+                                        item.get('image_url', {}).get('url')):
+
+                                        url = item['image_url']['url']
+                                        if '/api/file/' in url:
+                                            file_id = url.split('/api/file/')[-1]
+                                            print(f"🎯 Found recent image in session (from nested JSON): {file_id}")
+                                            return file_id
+                    except (json.JSONDecodeError, TypeError):
+                        # 如果不是JSON，则作为普通字符串处理
+                        pass
+
                     # 查找字符串中的图像引用，如 ![...](/api/file/im_xxx.jpeg)
                     import re
                     image_pattern = r'/api/file/(im_[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+)'
                     matches = re.findall(image_pattern, content)
                     if matches:
                         file_id = matches[-1]  # 取最后一个匹配的图像
-                        print(f"� Found recent image in session: {file_id}")
+                        print(f"🎯 Found recent image in session (from text): {file_id}")
                         return file_id
 
                 # 处理列表格式的content
@@ -170,7 +187,7 @@ def get_most_recent_image_from_session(session_id: str, user_id: str = None) -> 
                             # 从URL中提取文件ID，例如 '/api/file/im_abc123.png' -> 'im_abc123.png'
                             if '/api/file/' in url:
                                 file_id = url.split('/api/file/')[-1]
-                                print(f"� Found recent image in session: {file_id}")
+                                print(f"🎯 Found recent image in session (from list): {file_id}")
                                 return file_id
 
         return ""
@@ -195,7 +212,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
     from strands import tool
 
     @tool
-    def generate_image_with_context(
+    async def generate_image_with_context(
         prompt: str = Field(description="Detailed description of the image to generate"),
         aspect_ratio: str = Field(default="1:1", description="Aspect ratio for the image (1:1, 4:3, 16:9, 3:4)"),
         input_image: str = Field(default="", description="Optional image to use as reference. Pass image_id here, e.g. 'im_jurheut7.png'. Leave empty if not needed. Best for image editing cases like: Editing specific parts of the image, Removing specific objects, Maintaining visual elements across scenes"),
@@ -216,7 +233,9 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
         Returns:
             A message indicating successful image generation with file details
         """
-        print("🎨️ generate_image_with_context tool called!")
+        # 生成唯一的调用ID来跟踪重复调用
+        call_id = generate_file_id()
+        print(f"🎨️ generate_image_with_context tool called! Call ID: {call_id}")
         print(f"🔍 DEBUG: Using provided context - session_id: {session_id}, canvas_id: {canvas_id}")
         print(f"🔍 DEBUG: Using provided image_model: {image_model}")
         print(f"🔍 DEBUG: Using provided user_id: {user_id}")
@@ -239,8 +258,11 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
             if not isinstance(input_image, str):
                 input_image = ""
 
-            # Handle use_previous_image parameter
-            if use_previous_image and not input_image:
+            # Check if the model supports input images before using previous image
+            model_supports_input = 'kontext' in model.lower() or 'i2v' in model.lower() or 'edit' in model.lower()
+
+            # Handle use_previous_image parameter - only for models that support input images
+            if use_previous_image and not input_image and model_supports_input:
                 print(f"� Using previous image from session")
                 try:
                     # Use the user_id passed to the function
@@ -302,6 +324,10 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                 except Exception as e:
                     print(f"❌ Error getting previous image: {e}")
                     return "I encountered an error while trying to access previous images in this conversation. Please upload an image or try again."
+            elif use_previous_image and not input_image and not model_supports_input:
+                # User wants to use previous image but the model doesn't support it
+                print(f"⚠️ Model {model} doesn't support input images, ignoring use_previous_image=True")
+                # Continue with text-to-image generation without previous image
 
             print(f"🎨 Generating image: {model}")
 
@@ -339,15 +365,15 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                     # Assume it's already base64 encoded
                     processed_input_image = input_image
 
-            # Generate image using async generator (必须保持异步)
+            # Generate image using async generator (直接使用 await)
             try:
-                file_id, width, height, file_path = run_async_safe(generator.generate(
+                file_id, width, height, file_path = await generator.generate(
                     prompt=prompt,
                     model=model,
                     aspect_ratio=aspect_ratio,
                     input_image=processed_input_image,
                     ctx={'session_id': session_id, 'tool_call_id': tool_call_id}
-                ))
+                )
             except Exception as e:
                 print(f"❌ Image generation error: {e}")
                 raise e
@@ -372,7 +398,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                         # 保存文件记录
                         db_service.create_file(file_id, file_path, width, height)
 
-                        # 保存图像消息和广播websocket
+                        # 保存图像消息
                         if session_id:
                             # Create image message for database
                             image_message = {
@@ -390,10 +416,14 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                             db_service.create_message(session_id, 'assistant', json.dumps(image_message))
                 else:
                     print(f"⚠️ No user_id available for database operations, skipping database save")
-                    # Still broadcast the websocket message even if database save fails
-                    pass
 
-                    # Broadcast file_generated event to websocket
+                # Always broadcast file_generated event to websocket (regardless of database save status)
+                # 检查是否已经发送过这个file_generated事件
+                file_event_key = f"file_generated_{session_id}_{file_id}_{tool_call_id}"
+                if file_event_key in _sent_file_events:
+                    print(f"🔄 Skipping duplicate file_generated event: {file_id}")
+                else:
+                    _sent_file_events.add(file_event_key)
                     message_data = {
                         'type': 'file_generated',
                         'file_id': file_id,
@@ -403,12 +433,11 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                         'tool_call_id': tool_call_id
                     }
                     print(f"🔍 DEBUG: Broadcasting file_generated message: {message_data}")
-                    run_async_safe(broadcast_session_update(session_id, canvas_id, message_data))
+                    await broadcast_session_update(session_id, canvas_id, message_data, effective_user_id)
                     print(f"🔍 DEBUG: Successfully broadcasted file_generated message for session {session_id}")
 
             except Exception as db_error:
                 print(f"🔍 DEBUG: Database save error: {db_error}")
-                import traceback
                 traceback.print_exc()
             
             return f"Image generated successfully! File ID: {file_id}, Size: {width}x{height}. The image has been saved and is ready for use."

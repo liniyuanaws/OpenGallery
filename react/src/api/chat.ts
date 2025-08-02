@@ -35,27 +35,50 @@ export const sendMessages = async (payload: {
   newMessages: Message[]
   textModel: Model
   imageModel: Model
+  videoModel?: Model
   systemPrompt: string | null
 }) => {
   // 添加调试日志
   console.log('🔍 DEBUG: Sending to backend - imageModel:', payload.imageModel)
+  console.log('🔍 DEBUG: Sending to backend - videoModel:', payload.videoModel)
+
+  const requestBody: any = {
+    messages: payload.newMessages,
+    canvas_id: payload.canvasId,
+    session_id: payload.sessionId,
+    text_model: payload.textModel,
+    image_model: payload.imageModel,
+    system_prompt: payload.systemPrompt,
+  }
+
+  // Only include video_model if it's provided
+  if (payload.videoModel) {
+    requestBody.video_model = payload.videoModel
+  }
 
   const response = await authenticatedFetch(`/api/chat`, {
     method: 'POST',
-    body: JSON.stringify({
-      messages: payload.newMessages,
-      canvas_id: payload.canvasId,
-      session_id: payload.sessionId,
-      text_model: payload.textModel,
-      image_model: payload.imageModel,
-      system_prompt: payload.systemPrompt,
-    }),
+    body: JSON.stringify(requestBody),
   })
   if (!response.ok) {
     throw new Error(`Failed to send messages: ${response.status}`)
   }
   const data = await response.json()
   return data as Message[]
+}
+
+export const saveMessage = async (sessionId: string, message: Message) => {
+  const response = await authenticatedFetch(`/api/chat_session/${sessionId}/message`, {
+    method: 'POST',
+    body: JSON.stringify({
+      role: message.role,
+      content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to save message: ${response.status}`)
+  }
+  return await response.json()
 }
 
 export const cancelChat = async (sessionId: string) => {

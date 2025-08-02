@@ -14,10 +14,16 @@ const ModelSelector: React.FC = () => {
   const {
     textModel,
     imageModel,
+    videoModel,
+    comfyuiModel,
     setTextModel,
     setImageModel,
+    setVideoModel,
+    setComfyuiModel,
     textModels,
     imageModels,
+    videoModels,
+    comfyuiModels,
   } = useConfigs()
 
   // Group models by provider
@@ -34,6 +40,7 @@ const ModelSelector: React.FC = () => {
 
   const groupedTextModels = groupModelsByProvider(textModels)
   const groupedImageModels = groupModelsByProvider(imageModels)
+  const groupedVideoModels = groupModelsByProvider(videoModels)
 
   // Sort providers to put Jaaz first
   const sortProviders = (providers: [string, typeof textModels][]) => {
@@ -95,20 +102,34 @@ const ModelSelector: React.FC = () => {
         </SelectContent>
       </Select>
       <Select
-        value={imageModel?.provider + ':' + imageModel?.model}
+        value={comfyuiModel?.provider + ':' + comfyuiModel?.model}
         onValueChange={(value) => {
-          localStorage.setItem('image_model', value)
-          setImageModel(
-            imageModels?.find((m) => m.provider + ':' + m.model == value)
-          )
+          localStorage.setItem('comfyui_model', value)
+          const selectedModel = comfyuiModels?.find((m) => m.provider + ':' + m.model == value)
+          setComfyuiModel(selectedModel)
+
+          // 根据模型类型自动设置图像或视频模型
+          if (selectedModel?.media_type === 'image') {
+            localStorage.setItem('image_model', value)
+            setImageModel(selectedModel)
+            // 清除视频模型
+            localStorage.removeItem('video_model')
+            setVideoModel(undefined)
+          } else if (selectedModel?.media_type === 'video') {
+            localStorage.setItem('video_model', value)
+            setVideoModel(selectedModel)
+            // 清除图像模型
+            localStorage.removeItem('image_model')
+            setImageModel(undefined)
+          }
         }}
       >
         <SelectTrigger className="w-fit max-w-[40%] bg-background">
-          <span>🎨</span>
-          <SelectValue placeholder="Theme" />
+          <span>🎨🎬</span>
+          <SelectValue placeholder="ComfyUI Model" />
         </SelectTrigger>
         <SelectContent>
-          {sortProviders(Object.entries(groupedImageModels)).map(([provider, models]) => {
+          {sortProviders(Object.entries(groupModelsByProvider(comfyuiModels))).map(([provider, models]) => {
             const providerInfo = getProviderDisplayName(provider)
             return (
               <SelectGroup key={provider}>
@@ -127,7 +148,7 @@ const ModelSelector: React.FC = () => {
                     key={model.provider + ':' + model.model}
                     value={model.provider + ':' + model.model}
                   >
-                    {model.model}
+                    {model.model} {model.media_type === 'image' ? '🎨' : '🎬'}
                   </SelectItem>
                 ))}
               </SelectGroup>

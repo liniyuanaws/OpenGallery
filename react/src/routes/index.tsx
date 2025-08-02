@@ -113,6 +113,7 @@ function Home() {
                 session_id: nanoid(),
                 text_model: configs.textModel,
                 image_model: configs.imageModel,
+                video_model: configs.videoModel,
                 system_prompt:
                   localStorage.getItem('system_prompt') ||
                   DEFAULT_SYSTEM_PROMPT,

@@ -243,6 +243,21 @@ const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
         </PhotoView>
       )
     },
+    video: ({ node, children, ...props }) => {
+      return (
+        <div className="my-4 rounded-lg overflow-hidden">
+          <video
+            className="w-full max-w-full h-auto"
+            controls
+            preload="metadata"
+            {...props}
+          >
+            {children}
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      )
+    },
   }
 
   // 如果内容包含think标签，进行特殊处理

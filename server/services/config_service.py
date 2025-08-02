@@ -24,10 +24,12 @@ DEFAULT_PROVIDERS_CONFIG = {
     },
     "comfyui": {
         "models": {
-            "flux-kontext": {"type": "image"},
-            "flux-t2i": {"type": "image"}
+            "flux-kontext": {"type": "comfyui", "media_type": "image"},
+            "flux-t2i": {"type": "comfyui", "media_type": "image"},
+            "wan-t2v": {"type": "comfyui", "media_type": "video"},
+            "wan-i2v": {"type": "comfyui", "media_type": "video"}
         },
-        "url": "http://comfyui-alb-905118004.us-west-2.elb.amazonaws.com:8080",
+        "url": "http://ec2-34-216-22-132.us-west-2.compute.amazonaws.com:8188",
         "api_key": ""
     },
     "bedrock": {

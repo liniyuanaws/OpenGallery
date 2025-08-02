@@ -1,4 +1,4 @@
-import { sendMessages } from '@/api/chat'
+import { sendMessages, saveMessage } from '@/api/chat'
 import Blur from '@/components/common/Blur'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { eventBus, TEvents } from '@/lib/event'
@@ -230,41 +230,88 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   )
 
   const handleFileGenerated = useCallback(
-    (data: TEvents['Socket::Session::FileGenerated']) => {
+    async (data: TEvents['Socket::Session::FileGenerated']) => {
+      console.log('🔍 handleFileGenerated called with data:', data)
+      console.log('🔍 Current sessionId:', sessionId)
+
       if (data.session_id !== sessionId) {
+        console.log('🔍 Session ID mismatch, ignoring file_generated event')
         return
       }
 
       console.log('⭐️file_generated', data)
 
-      // 创建图像消息并添加到聊天中
-      const imageMessage: Message = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'image_url',
-            image_url: {
-              url: `/api/file/${data.file_id}`
+      // 检查文件类型，为图片和视频创建不同的消息
+      const fileUrl = `/api/file/${data.file_id}`
+      const isVideo = data.file_type === 'video' || data.duration !== undefined
+
+      let fileMessage: Message
+
+      if (isVideo) {
+        // 为视频文件创建下载链接消息
+        fileMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          role: 'assistant',
+          content: `✅ Video generated successfully!\n\n📹 **Video Details:**\n- File ID: \`${data.file_id}\`\n- Dimensions: ${data.width}x${data.height}\n- Duration: ${data.duration} seconds\n\n📥 **Download Video:**\n[Download ${data.file_id}](${fileUrl})\n\nThe video has been saved and is ready for download.`,
+          timestamp: new Date().toISOString()
+        }
+      } else {
+        // 为图片文件创建图像消息
+        fileMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          role: 'assistant',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: fileUrl
+              }
             }
-          }
-        ]
+          ],
+          timestamp: new Date().toISOString()
+        }
       }
 
-      setMessages(prev => [...prev, imageMessage])
+      setMessages(prev => [...prev, fileMessage])
       setPending(false)
-      scrollToBottom()
+
+      // 注意：后端工具已经保存了消息，这里不需要重复保存
+      // 只是临时添加到前端状态，页面刷新时会从数据库重新加载
+      console.log('📝 File message added to frontend state (backend tools handle database saving)')
     },
-    [sessionId, scrollToBottom]
+    [sessionId]
   )
 
   const handleAllMessages = useCallback(
     (data: TEvents['Socket::Session::AllMessages']) => {
+      console.log(`🔍 handleAllMessages called: data.session_id=${data.session_id}, current sessionId=${sessionId}`)
+      console.log(`🔍 DEBUG: Received messages:`, data.messages)
+
       if (data.session_id && data.session_id !== sessionId) {
+        console.log(`🔍 Session ID mismatch, ignoring message update`)
         return
       }
 
+      // 防止空消息覆盖已有消息
+      if (!data.messages || data.messages.length === 0) {
+        console.log(`🔍 DEBUG: Received empty messages, ignoring to prevent clearing existing messages`)
+        return
+      }
+
+      console.log(`🔍 Updating messages with ${data.messages?.length || 0} messages`)
       setMessages(() => {
         console.log('👇all_messages', data.messages)
+
+        // 缓存消息到本地存储，防止丢失
+        if (data.messages && data.messages.length > 0) {
+          try {
+            localStorage.setItem(`session_${sessionId}_messages`, JSON.stringify(data.messages))
+            localStorage.setItem(`session_${sessionId}_timestamp`, Date.now().toString())
+          } catch (e) {
+            console.warn('Failed to cache messages to localStorage:', e)
+          }
+        }
+
         return data.messages
       })
       scrollToBottom()
@@ -280,6 +327,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       setPending(false)
       scrollToBottom()
+
+      // 流式处理完成后，移除活跃会话以停止轮询
+      if (sessionId) {
+        socketManager.removeActiveSession(sessionId)
+      }
     },
     [sessionId, scrollToBottom]
   )
@@ -336,7 +388,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       eventBus.off('Socket::Session::Error', handleError)
       eventBus.off('Socket::Session::Info', handleInfo)
     }
-  })
+  }, [
+    handleDelta,
+    handleToolCall,
+    handleToolCallArguments,
+    handleImageGenerated,
+    handleFileGenerated,
+    handleAllMessages,
+    handleDone,
+    handleError,
+    handleInfo
+  ])
 
   const initChat = useCallback(async () => {
     if (!sessionId) {
@@ -348,6 +410,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     try {
       const { getChatSession } = await import('@/api/chat')
       const { messages: msgs, lastImageId } = await getChatSession(sessionId)
+
+      console.log(`🔍 DEBUG: initChat loaded ${msgs.length} messages for session ${sessionId}`)
+      console.log(`🔍 DEBUG: Messages:`, msgs)
+      console.log(`🔍 DEBUG: Last image ID:`, lastImageId)
 
       setMessages(msgs)
       setCurrentImageContext(lastImageId)
@@ -364,37 +430,156 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       scrollToBottom()
     } catch (error) {
       console.error('Error loading chat session:', error)
-      // 降级处理：直接调用原始API
-      const resp = await fetch('/api/chat_session/' + sessionId)
-      const data = await resp.json()
+      // 降级处理：直接调用原始API，使用认证头
+      try {
+        const { authenticatedFetch } = await import('@/api/auth')
+        const resp = await authenticatedFetch('/api/chat_session/' + sessionId)
 
-      let msgs = []
-      if (Array.isArray(data)) {
-        msgs = data
-      } else if (data && data.messages) {
-        msgs = data.messages
+        if (!resp.ok) {
+          console.error(`Failed to load session ${sessionId}: ${resp.status}`)
+          setMessages([])
+          setCurrentImageContext('')
+          return
+        }
+
+        const data = await resp.json()
+
+        let msgs = []
+        if (Array.isArray(data)) {
+          msgs = data
+        } else if (data && data.messages) {
+          msgs = data.messages
+        }
+
+        console.log(`🔍 Fallback loaded ${msgs.length} messages for session ${sessionId}`)
+        setMessages(msgs)
+        setCurrentImageContext('')
+
+        if (msgs.length > 0) {
+          setInitCanvas(false)
+        }
+
+        scrollToBottom()
+      } catch (fallbackError) {
+        console.error('Fallback API call also failed:', fallbackError)
+
+        // 尝试从本地缓存恢复消息
+        try {
+          const cachedMessages = localStorage.getItem(`session_${sessionId}_messages`)
+          const cachedTimestamp = localStorage.getItem(`session_${sessionId}_timestamp`)
+
+          if (cachedMessages && cachedTimestamp) {
+            const timestamp = parseInt(cachedTimestamp)
+            const now = Date.now()
+            // 如果缓存不超过1小时，使用缓存的消息
+            if (now - timestamp < 60 * 60 * 1000) {
+              const msgs = JSON.parse(cachedMessages)
+              console.log(`🔍 Restored ${msgs.length} messages from cache for session ${sessionId}`)
+              setMessages(msgs)
+              setCurrentImageContext('')
+
+              if (msgs.length > 0) {
+                setInitCanvas(false)
+              }
+
+              scrollToBottom()
+              return
+            }
+          }
+        } catch (cacheError) {
+          console.warn('Failed to restore from cache:', cacheError)
+        }
+
+        // 最后的降级：显示空消息列表但不报错
+        console.log(`🔍 No cached messages available, showing empty session for ${sessionId}`)
+        setMessages([])
+        setCurrentImageContext('')
       }
-
-      setMessages(msgs)
-      setCurrentImageContext('')
-
-      if (msgs.length > 0) {
-        setInitCanvas(false)
-      }
-
-      scrollToBottom()
     }
   }, [sessionId, scrollToBottom, setInitCanvas])
 
   useEffect(() => {
+    // 检查会话是否正在处理中，如果是则显示提示
+    const checkProcessingStatus = async () => {
+      if (!sessionId) return
+
+      try {
+        const { authenticatedFetch } = await import('@/api/auth')
+        const response = await authenticatedFetch(`/api/chat_session/${sessionId}/status`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.is_processing) {
+            // 显示处理中的提示
+            toast.info('后台正在处理中，请耐心等待...', {
+              closeButton: true,
+              duration: 5000,
+              style: {
+                backgroundColor: '#3b82f6',
+                color: 'white'
+              },
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error checking session status:', error)
+      }
+    }
+
+    // 正常初始化聊天
     initChat()
+
+    // 检查处理状态
+    checkProcessingStatus()
+
+    // 清理过期的缓存消息（超过24小时）
+    const cleanupExpiredCache = () => {
+      try {
+        const keys = Object.keys(localStorage)
+        const now = Date.now()
+
+        keys.forEach(key => {
+          if (key.startsWith('session_') && key.endsWith('_timestamp')) {
+            const timestamp = parseInt(localStorage.getItem(key) || '0')
+            if (now - timestamp > 24 * 60 * 60 * 1000) { // 24小时
+              const sessionId = key.replace('session_', '').replace('_timestamp', '')
+              localStorage.removeItem(`session_${sessionId}_messages`)
+              localStorage.removeItem(`session_${sessionId}_timestamp`)
+              console.log(`🧹 Cleaned up expired cache for session ${sessionId}`)
+            }
+          }
+        })
+      } catch (e) {
+        console.warn('Failed to cleanup expired cache:', e)
+      }
+    }
+
+    cleanupExpiredCache()
   }, [sessionId, initChat])
 
   // 管理轮询会话
   useEffect(() => {
     if (sessionId) {
-      // 总是添加活跃会话到轮询列表（作为WebSocket的备用机制）
+      // 添加活跃会话（仅在WebSocket连接失败时启用轮询作为备用机制）
       socketManager.addActiveSession(sessionId)
+
+      // 检查会话是否正在处理中，如果是则确保轮询启动
+      const checkSessionStatus = async () => {
+        try {
+          const response = await fetch(`/api/chat_session/${sessionId}/status`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.is_processing) {
+              console.log(`🔄 Session ${sessionId} is processing, ensuring polling is active`)
+              // 如果会话正在处理，强制启动轮询以确保能接收更新
+              socketManager.forceStartPolling()
+            }
+          }
+        } catch (error) {
+          console.error('Error checking session status:', error)
+        }
+      }
+
+      checkSessionStatus()
     }
 
     return () => {
@@ -429,11 +614,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   const onSendMessages = useCallback(
-    (data: Message[], configs: { textModel: Model; imageModel: Model }) => {
+    (data: Message[], configs: { textModel: Model; imageModel: Model; videoModel?: Model }) => {
       setPending('text')
       setMessages(data)
 
-      // 总是添加会话到轮询列表（作为WebSocket的备用机制）
+      // 添加会话到活跃列表（仅在WebSocket连接失败时启用轮询作为备用机制）
       if (sessionId) {
         socketManager.addActiveSession(sessionId)
       }
@@ -444,6 +629,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         newMessages: data,
         textModel: configs.textModel,
         imageModel: configs.imageModel,
+        videoModel: configs.videoModel,
         systemPrompt:
           localStorage.getItem('system_prompt') || DEFAULT_SYSTEM_PROMPT,
       })

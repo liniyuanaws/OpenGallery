@@ -127,10 +127,12 @@ export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
   },
   comfyui: {
     models: {
-      'flux-kontext': { type: 'image' },
-      'flux-t2i': { type: 'image' },
+      'flux-kontext': { type: 'comfyui', media_type: 'image' },
+      'flux-t2i': { type: 'comfyui', media_type: 'image' },
+      'wan-t2v': { type: 'comfyui', media_type: 'video' },
+      'wan-i2v': { type: 'comfyui', media_type: 'video' },
     },
-    url: 'http://comfyui-alb-905118004.us-west-2.elb.amazonaws.com:8080',
+    url: 'http://ec2-34-216-22-132.us-west-2.compute.amazonaws.com:8188',
     api_key: '',
   },
   // huggingface: {
@@ -153,12 +155,16 @@ export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
 
 export const DEFAULT_MODEL_LIST = Object.keys(DEFAULT_PROVIDERS_CONFIG).flatMap(
   (provider) =>
-    Object.keys(DEFAULT_PROVIDERS_CONFIG[provider].models).map((model) => ({
-      provider,
-      model,
-      type: DEFAULT_PROVIDERS_CONFIG[provider].models[model].type ?? 'text',
-      url: DEFAULT_PROVIDERS_CONFIG[provider].url,
-    }))
+    Object.keys(DEFAULT_PROVIDERS_CONFIG[provider].models).map((model) => {
+      const modelConfig = DEFAULT_PROVIDERS_CONFIG[provider].models[model]
+      return {
+        provider,
+        model,
+        type: modelConfig.type ?? 'text',
+        media_type: modelConfig.media_type,
+        url: DEFAULT_PROVIDERS_CONFIG[provider].url,
+      }
+    })
 )
 
 // Tool call name mapping

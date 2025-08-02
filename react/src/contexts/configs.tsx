@@ -15,7 +15,7 @@ export const ConfigsProvider = ({
   children: React.ReactNode
 }) => {
   const configsStore = useConfigsStore()
-  const { setTextModels, setImageModels, setTextModel, setImageModel } =
+  const { setTextModels, setImageModels, setVideoModels, setComfyuiModels, setTextModel, setImageModel, setVideoModel, setComfyuiModel } =
     configsStore
 
   const { data, refetch: refreshModels } = useQuery({
@@ -55,13 +55,42 @@ export const ConfigsProvider = ({
         setImageModel(modelList.find((m) => m.type == 'image'))
       }
 
+      const videoModel = localStorage.getItem('video_model')
+      if (
+        videoModel &&
+        modelList.find((m) => m.provider + ':' + m.model == videoModel)
+      ) {
+        setVideoModel(
+          modelList.find((m) => m.provider + ':' + m.model == videoModel)
+        )
+      } else {
+        setVideoModel(modelList.find((m) => m.type == 'video'))
+      }
+
       const textModels = modelList?.filter((m) => m.type == 'text')
       const imageModels = modelList?.filter((m) => m.type == 'image')
+      const videoModels = modelList?.filter((m) => m.type == 'video')
+      const comfyuiModels = modelList?.filter((m) => m.type == 'comfyui')
 
       setTextModels(textModels || [])
       setImageModels(imageModels || [])
+      setVideoModels(videoModels || [])
+      setComfyuiModels(comfyuiModels || [])
+
+      // 设置默认的 ComfyUI 模型
+      const comfyuiModel = localStorage.getItem('comfyui_model')
+      if (
+        comfyuiModel &&
+        modelList.find((m) => m.provider + ':' + m.model == comfyuiModel)
+      ) {
+        setComfyuiModel(
+          modelList.find((m) => m.provider + ':' + m.model == comfyuiModel)
+        )
+      } else {
+        setComfyuiModel(modelList.find((m) => m.type == 'comfyui'))
+      }
     }
-  }, [data, setImageModel, setTextModel, setTextModels, setImageModels])
+  }, [data, setImageModel, setTextModel, setVideoModel, setComfyuiModel, setTextModels, setImageModels, setVideoModels, setComfyuiModels])
 
   return (
     <ConfigsContext.Provider

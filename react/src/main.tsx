@@ -9,10 +9,8 @@ const rootElement = document.getElementById('root')!
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
-    <StrictMode>
-      <SocketProvider>
-        <App />
-      </SocketProvider>
-    </StrictMode>
+    <SocketProvider>
+      <App />
+    </SocketProvider>
   )
 }
