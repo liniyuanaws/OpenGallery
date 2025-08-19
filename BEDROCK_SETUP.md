@@ -74,7 +74,7 @@ Create or update your `user_data/config.toml` file:
 
 ```toml
 [bedrock]
-region = "us-west-2"  # Your preferred AWS region
+region = "us-east-1"  # Your preferred AWS region
 # api_key is not needed for Bedrock - uses AWS credentials
 
 [bedrock.models]
