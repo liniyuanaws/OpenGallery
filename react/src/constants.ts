@@ -62,6 +62,10 @@ export const PROVIDER_NAME_MAPPING: {
     name: 'AWS Bedrock',
     icon: 'https://a0.awsstatic.com/libra-css/images/logos/aws_logo_smile_1200x630.png',
   },
+  siliconflow: {
+    name: 'SiliconFlow',
+    icon: 'https://siliconflow.cn/favicon.ico',
+  },
 }
 export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
   anthropic: {
@@ -150,6 +154,14 @@ export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
     api_key: '',
     max_tokens: 8192,
     region: 'us-west-2',
+  },
+  siliconflow: {
+    models: {
+      'deepseek-ai/DeepSeek-V3': { type: 'text' },
+    },
+    url: 'https://api.siliconflow.cn/v1/',
+    api_key: '',
+    max_tokens: 8192,
   },
 }
 

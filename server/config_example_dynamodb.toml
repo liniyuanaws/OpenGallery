@@ -30,7 +30,7 @@ api_key = "your-openai-api-key"
 max_tokens = 8192
 
 [bedrock]
-models = { 
+models = {
     "us.anthropic.claude-3-7-sonnet-20250219-v1:0" = { type = "text" },
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0" = { type = "text" },
     "us.anthropic.claude-3-5-haiku-20241022-v1:0" = { type = "text" }
@@ -39,6 +39,14 @@ url = ""
 api_key = ""  # Not needed for Bedrock - uses AWS credentials
 max_tokens = 8192
 region = "us-west-2"
+
+[siliconflow]
+models = {
+    "deepseek-ai/DeepSeek-V3" = { type = "text" }
+}
+url = "https://api.siliconflow.cn/v1/"
+api_key = "your-siliconflow-api-key"
+max_tokens = 8192
 
 [comfyui]
 models = {

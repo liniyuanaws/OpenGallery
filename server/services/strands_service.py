@@ -129,6 +129,21 @@ def create_model_instance(text_model: Dict[str, Any]):
             )
         except:
             return BedrockModel(model_id=model)
+    elif provider == 'siliconflow':
+        try:
+            return OpenAIModel(
+                client_args={
+                    "api_key": api_key,
+                    "base_url": url
+                },
+                model_id=model,
+                params={
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7
+                }
+            )
+        except:
+            return BedrockModel(model_id=model)
     else:
         try:
             return OpenAIModel(
@@ -215,15 +230,71 @@ For other tasks, use your general knowledge and reasoning capabilities.
 Be helpful, accurate, and creative in your responses.
 """
 
-        # 转换消息格式
-        user_prompt = ""
-        for msg in reversed(messages):
-            if msg.get('role') == 'user':
-                user_prompt = msg.get('content', '')
-                break
+        # 获取历史消息并转换为Strands格式
+        try:
+            # 获取数据库中的历史消息
+            historical_messages = db_service.get_chat_history(session_id)
+            print(f"🔍 DEBUG: Retrieved {len(historical_messages)} historical messages from database")
 
-        if not user_prompt:
-            user_prompt = "Hello, how can I help you?"
+            # 将当前传入的messages与历史消息合并，去重
+            all_messages = []
+
+            # 添加历史消息
+            for hist_msg in historical_messages:
+                if hist_msg.get('role') and hist_msg.get('content'):
+                    all_messages.append({
+                        'role': hist_msg['role'],
+                        'content': hist_msg['content']
+                    })
+
+            # 添加当前消息（如果不在历史中）
+            for current_msg in messages:
+                if current_msg.get('role') and current_msg.get('content'):
+                    # 简单去重：检查最后几条消息是否已存在
+                    is_duplicate = False
+                    for existing_msg in all_messages[-3:]:  # 只检查最后3条避免性能问题
+                        if (existing_msg.get('role') == current_msg.get('role') and
+                            existing_msg.get('content') == current_msg.get('content')):
+                            is_duplicate = True
+                            break
+
+                    if not is_duplicate:
+                        all_messages.append({
+                            'role': current_msg['role'],
+                            'content': current_msg['content']
+                        })
+
+            print(f"🔍 DEBUG: Total messages for agent: {len(all_messages)}")
+
+            # 获取最后一条用户消息作为当前prompt
+            user_prompt = ""
+            for msg in reversed(all_messages):
+                if msg.get('role') == 'user':
+                    user_prompt = msg.get('content', '')
+                    break
+
+            if not user_prompt:
+                user_prompt = "Hello, how can I help you?"
+
+        except Exception as e:
+            print(f"❌ Error retrieving chat history: {e}")
+            # 降级处理：只使用当前传入的消息
+            all_messages = []
+            for msg in messages:
+                if msg.get('role') and msg.get('content'):
+                    all_messages.append({
+                        'role': msg['role'],
+                        'content': msg['content']
+                    })
+
+            user_prompt = ""
+            for msg in reversed(messages):
+                if msg.get('role') == 'user':
+                    user_prompt = msg.get('content', '')
+                    break
+
+            if not user_prompt:
+                user_prompt = "Hello, how can I help you?"
 
         # 使用上下文管理器，传递当前用户ID
         try:
@@ -265,12 +336,18 @@ Be helpful, accurate, and creative in your responses.
 
             print(f"🔍 DEBUG: Using tools: {[tool.__name__ for tool in tools]}")
 
-            # 创建带有上下文工具的agent
+            # 创建带有上下文工具的agent，并设置历史消息
             agent = Agent(
                 model=model,
                 tools=tools,
                 system_prompt=agent_system_prompt
             )
+
+            # 设置历史消息到agent中，让模型能够访问完整的对话上下文
+            if len(all_messages) > 1:  # 如果有历史消息
+                # 将历史消息转换为Strands Agent期望的格式
+                agent.messages = all_messages[:-1]  # 除了最后一条用户消息，其他都作为历史
+                print(f"🔍 DEBUG: Set {len(agent.messages)} historical messages to agent")
 
             print(f"✅ Agent created with {len(tools)} tools")
 
@@ -379,17 +456,79 @@ For analysis, research, or data processing tasks, use your own reasoning capabil
             system_prompt=orchestrator_system_prompt
         )
 
+        # 设置历史消息到多Agent中，让模型能够访问完整的对话上下文
+        if len(all_messages) > 1:  # 如果有历史消息
+            # 将历史消息转换为Strands Agent期望的格式
+            agent.messages = all_messages[:-1]  # 除了最后一条用户消息，其他都作为历史
+            print(f"🔍 DEBUG: Multi-agent set {len(agent.messages)} historical messages to agent")
+
         print(f"✅ Multi-agent created successfully")
         
-        # 转换消息格式 - 取最后一条用户消息
-        user_prompt = ""
-        for msg in reversed(messages):
-            if msg.get('role') == 'user':
-                user_prompt = msg.get('content', '')
-                break
+        # 获取历史消息并转换为Strands格式（与单Agent模式相同的逻辑）
+        try:
+            # 获取数据库中的历史消息
+            historical_messages = db_service.get_chat_history(session_id)
+            print(f"🔍 DEBUG: Multi-agent retrieved {len(historical_messages)} historical messages from database")
 
-        if not user_prompt:
-            user_prompt = "Hello, how can I help you?"
+            # 将当前传入的messages与历史消息合并，去重
+            all_messages = []
+
+            # 添加历史消息
+            for hist_msg in historical_messages:
+                if hist_msg.get('role') and hist_msg.get('content'):
+                    all_messages.append({
+                        'role': hist_msg['role'],
+                        'content': hist_msg['content']
+                    })
+
+            # 添加当前消息（如果不在历史中）
+            for current_msg in messages:
+                if current_msg.get('role') and current_msg.get('content'):
+                    # 简单去重：检查最后几条消息是否已存在
+                    is_duplicate = False
+                    for existing_msg in all_messages[-3:]:  # 只检查最后3条避免性能问题
+                        if (existing_msg.get('role') == current_msg.get('role') and
+                            existing_msg.get('content') == current_msg.get('content')):
+                            is_duplicate = True
+                            break
+
+                    if not is_duplicate:
+                        all_messages.append({
+                            'role': current_msg['role'],
+                            'content': current_msg['content']
+                        })
+
+            print(f"🔍 DEBUG: Multi-agent total messages: {len(all_messages)}")
+
+            # 获取最后一条用户消息作为当前prompt
+            user_prompt = ""
+            for msg in reversed(all_messages):
+                if msg.get('role') == 'user':
+                    user_prompt = msg.get('content', '')
+                    break
+
+            if not user_prompt:
+                user_prompt = "Hello, how can I help you?"
+
+        except Exception as e:
+            print(f"❌ Multi-agent error retrieving chat history: {e}")
+            # 降级处理：只使用当前传入的消息
+            all_messages = []
+            for msg in messages:
+                if msg.get('role') and msg.get('content'):
+                    all_messages.append({
+                        'role': msg['role'],
+                        'content': msg['content']
+                    })
+
+            user_prompt = ""
+            for msg in reversed(messages):
+                if msg.get('role') == 'user':
+                    user_prompt = msg.get('content', '')
+                    break
+
+            if not user_prompt:
+                user_prompt = "Hello, how can I help you?"
 
         # 使用上下文管理器设置会话上下文，传递当前用户ID
         try:

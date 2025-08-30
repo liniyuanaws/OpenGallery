@@ -40,6 +40,14 @@ DEFAULT_PROVIDERS_CONFIG = {
         "api_key": "",
         "max_tokens": 8192,
         "region": "us-west-2"
+    },
+    "siliconflow": {
+        "models": {
+            "deepseek-ai/DeepSeek-V3": {"type": "text"}
+        },
+        "url": "https://api.siliconflow.cn/v1/",
+        "api_key": "",
+        "max_tokens": 8192
     }
 }
 

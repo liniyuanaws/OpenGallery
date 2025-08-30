@@ -260,10 +260,7 @@ export function LoginDialog() {
                 {isLoading ? 'Logging in...' : 'Login'}
               </Button>
 
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground mb-2">Demo accounts:</p>
-                <p className="text-xs text-muted-foreground">admin/admin123 or demo/demo123</p>
-              </div>
+
             </div>
           </TabsContent>
 
