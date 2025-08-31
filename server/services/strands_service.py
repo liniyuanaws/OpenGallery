@@ -9,12 +9,25 @@ from typing import List, Dict, Any, Optional
 
 from strands import Agent, tool
 try:
-    from strands.models import BedrockModel, AnthropicModel, OpenAIModel, OllamaModel
+    from strands.models import BedrockModel
+    from strands.models.openai import OpenAIModel
+    from strands.models.anthropic import AnthropicModel
+    from strands.models.ollama import OllamaModel
 except ImportError:
     from strands.models import BedrockModel
-    AnthropicModel = BedrockModel
-    OpenAIModel = BedrockModel
-    OllamaModel = BedrockModel
+    # 如果导入失败，使用BedrockModel作为fallback
+    try:
+        from strands.models.openai import OpenAIModel
+    except ImportError:
+        OpenAIModel = BedrockModel
+    try:
+        from strands.models.anthropic import AnthropicModel
+    except ImportError:
+        AnthropicModel = BedrockModel
+    try:
+        from strands.models.ollama import OllamaModel
+    except ImportError:
+        OllamaModel = BedrockModel
 
 from services.db_service import db_service
 from services.config_service import config_service
@@ -137,13 +150,13 @@ def create_model_instance(text_model: Dict[str, Any]):
                     "base_url": url
                 },
                 model_id=model,
-                params={
-                    "max_tokens": max_tokens,
-                    "temperature": 0.7
-                }
+                max_tokens=max_tokens,
+                temperature=0.7
             )
-        except:
-            return BedrockModel(model_id=model)
+        except Exception as e:
+            print(f"❌ Failed to create OpenAIModel for siliconflow: {e}")
+            # 不要降级到BedrockModel，因为deepseek模型ID在Bedrock中无效
+            raise Exception(f"Failed to create siliconflow model: {e}")
     else:
         try:
             return OpenAIModel(

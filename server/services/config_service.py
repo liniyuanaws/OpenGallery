@@ -43,7 +43,6 @@ DEFAULT_PROVIDERS_CONFIG = {
     },
     "siliconflow": {
         "models": {
-            "deepseek-ai/DeepSeek-V3": {"type": "text"}
         },
         "url": "https://api.siliconflow.cn/v1/",
         "api_key": "",
